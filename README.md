@@ -80,7 +80,6 @@ veritas-shield/
 * Frontend Developer
 * Backend Developer
 * AI Engineer
-* Data Analyst
 * Mobile Developer
 
 ---
