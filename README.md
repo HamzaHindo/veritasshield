@@ -68,7 +68,7 @@ veritas-shield/
 
 * **Frontend:** React
 * **Mobile:** Flutter
-* **Backend:** FastAPI / Node.js
+* **Backend:** Django / Python
 * **AI:** OpenAI API
 * **Database:** (TBD / Graph-based approach)
 
