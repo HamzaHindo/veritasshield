@@ -47,7 +47,7 @@ class ConflictDetector:
                     existing_clause_id   = match.existing_clause_id,
                     existing_clause_text = match.existing_clause_text,
                     existing_doc_title   = match.existing_doc_title,
-                    similarity_score     = match.score,
+                    score                = match.score,
                     reason               = reason
                 ))
         return conflicts

@@ -20,11 +20,17 @@ class Neo4jConnection:
             cls._initialized = False
         return cls._instance
 
-    def __init__(self, uri: str, user: str, password: str):
+    def __init__(self):
         # Ensure __init__ logic only runs once
         if self._initialized:
             return
-            
+        
+        load_dotenv()
+        
+        uri = os.getenv('NEO4J_URI')
+        user = os.getenv('NEO4J_USERNAME')
+        password = os.getenv('NEO4J_PASSWORD')
+
         self._driver = GraphDatabase.driver(uri, auth=(user, password))
         self._initialized = True
 
@@ -55,7 +61,7 @@ class Neo4jConnection:
 
     # ── Document nodes ───────────────────────────────────────────────────────
 
-    def create_document(self, doc_id: str, title: str, doc_type: str,
+    def create_document(self, doc_id: int, title: str, doc_type: str,
                         file_extension: str, signed_at: Optional[str] = None) -> None:
         with self._driver.session() as s:
             s.run(
@@ -70,7 +76,7 @@ class Neo4jConnection:
                 file_extension=file_extension, signed_at=signed_at
             )
 
-    def get_document(self, doc_id: str) -> Optional[dict]:
+    def get_document(self, doc_id: int) -> Optional[dict]:
         with self._driver.session() as s:
             result = s.run('MATCH (d:Document {id: $id}) RETURN d', id=doc_id)
             record = result.single()
@@ -78,7 +84,7 @@ class Neo4jConnection:
 
     # ── Clause nodes ─────────────────────────────────────────────────────────
 
-    def create_clause(self, clause_id: str, doc_id: str, text: str,
+    def create_clause(self, clause_id: int, doc_id: int, text: str,
                       clause_type: str, embedding: list[float]) -> None:
         with self._driver.session() as s:
             s.run(
@@ -95,7 +101,7 @@ class Neo4jConnection:
                 embedding=embedding, doc_id=doc_id
             )
 
-    def get_all_clauses(self, exclude_doc_id: Optional[str] = None) -> list[dict]:
+    def get_all_clauses(self, exclude_doc_id: Optional[int] = None) -> list[dict]:
         """
         Fetch all clauses from the graph, optionally excluding one document.
         Used for similarity comparison against existing DB.
@@ -127,7 +133,7 @@ class Neo4jConnection:
 
     # ── Edges ────────────────────────────────────────────────────────────────
 
-    def create_similar_to(self, clause_id_a: str, clause_id_b: str, score: float) -> None:
+    def create_similar_to(self, clause_id_a: int, clause_id_b: int, score: float) -> None:
         with self._driver.session() as s:
             s.run(
                 '''
@@ -138,7 +144,7 @@ class Neo4jConnection:
                 id_a=clause_id_a, id_b=clause_id_b, score=round(score, 4)
             )
 
-    def create_contradicts(self, clause_id_a: str, clause_id_b: str, reason: str) -> None:
+    def create_contradicts(self, clause_id_a: int, clause_id_b: int, reason: str) -> None:
         with self._driver.session() as s:
             s.run(
                 '''
@@ -149,7 +155,7 @@ class Neo4jConnection:
                 id_a=clause_id_a, id_b=clause_id_b, reason=reason
             )
 
-    def get_conflicts_for_document(self, doc_id: str) -> list[dict]:
+    def get_conflicts_for_document(self, doc_id: int) -> list[dict]:
         """Return all CONTRADICTS edges involving clauses of a document."""
         with self._driver.session() as s:
             result = s.run(
@@ -164,3 +170,5 @@ class Neo4jConnection:
                 doc_id=doc_id
             )
             return [dict(r) for r in result]
+        
+

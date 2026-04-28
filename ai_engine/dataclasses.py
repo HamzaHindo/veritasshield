@@ -8,42 +8,36 @@ class SimilarityMatch:
     clause and an existing clause in the knowledge graph.
 
     Attributes:
-        new_clause_id (str): Unique identifier for the clause currently being processed.
+        new_clause_id (int): Unique identifier for the clause currently being processed.
         new_clause_text (str): The raw text content of the new clause.
-        existing_clause_id (str): Unique identifier of the matching clause found in Neo4j.
+        existing_clause_id (int): Unique identifier of the matching clause found in Neo4j.
         existing_clause_text (str): The raw text content of the existing clause.
         existing_doc_title (str): The title of the source document containing the match.
         score (float): The cosine similarity score (typically 0.0 to 1.0).
     """
-    new_clause_id:    str
+    new_clause_id:    int
     new_clause_text:  str
-    existing_clause_id:   str
+    existing_clause_id:   int
     existing_clause_text: str
     existing_doc_title:   str
     score:            float
 
 
 @dataclass
-class Conflict:
+class Conflict(SimilarityMatch):
     """
     Represents a detected logical contradiction or legal inconsistency between 
     a new clause and an existing clause in the database.
 
     Attributes:
-        new_clause_id (str): Unique identifier for the incoming clause.
+        new_clause_id (int): Unique identifier for the incoming clause.
         new_clause_text (str): The raw text content of the incoming clause.
-        existing_clause_id (str): Unique identifier of the conflicting clause.
+        existing_clause_id (int): Unique identifier of the conflicting clause.
         existing_clause_text (str): The raw text content of the conflicting clause.
         existing_doc_title (str): The title of the document where the conflict was found.
-        similarity_score (float): The semantic similarity that triggered the conflict check.
+        score (float): The semantic similarity that triggered the conflict check.
         reason (str): A human-readable explanation or LLM-generated rationale for the conflict.
     """
-    new_clause_id:        str
-    new_clause_text:      str
-    existing_clause_id:   str
-    existing_clause_text: str
-    existing_doc_title:   str
-    similarity_score:     float
     reason:               str   # human-readable explanation
 
 
@@ -52,7 +46,7 @@ class Conflict:
 
 @dataclass
 class DocumentInput:
-    document_id:    str
+    document_id:    int
     raw_text:       str
     title:          str
     file_extension: str
@@ -62,7 +56,7 @@ class DocumentInput:
 
 @dataclass
 class AnalysisResult:
-    document_id:    str
+    document_id:    int
     doc_type:       str                 # from classifier
     clauses:        list[dict]          # [{id, text, clause_type}]
     similar_pairs:  list[SimilarityMatch]

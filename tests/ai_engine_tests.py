@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 # Database and Models
-from ai_engine.db.neo4j_connection import get_db
+from ai_engine.db.neo4j_connection import Neo4jConnection
 from ai_engine.models.embeddings import Embedder
 
 # Pipelines and Utils
@@ -24,7 +24,7 @@ def main():
 
     # 2. Initialize Singletons & Services
     try:
-        db = get_db()
+        db = Neo4jConnection()
         embedder = Embedder() # Forces the model to download/load into memory
         
         extractor = ClauseExtractor()
@@ -59,14 +59,14 @@ def main():
     """
 
     doc_input_1 = DocumentInput(
-        document_id="doc_001",
+        document_id=1,
         raw_text=doc1_text,
         title="Standard Employment Contract v1",
         file_extension="txt"
     )
 
     doc_input_2 = DocumentInput(
-        document_id="doc_002",
+        document_id=2,
         raw_text=doc2_text,
         title="Standard Employment Contract v2",
         file_extension="txt"
@@ -110,8 +110,8 @@ def main():
 
     # 8. Verify the Database State directly
     print(f"\n{'='*50}\n▶ Verifying Neo4j State directly\n{'='*50}")
-    persisted_conflicts = db.get_conflicts_for_document("doc_002")
-    print(f"Total conflict edges found in DB for doc_002: {len(persisted_conflicts)}")
+    persisted_conflicts = db.get_conflicts_for_document(2)
+    print(f"Total conflict edges found in DB for 2: {len(persisted_conflicts)}")
     for c in persisted_conflicts:
         print(f"\n  Clause : {c['clause_text'][:70]}...")
         print(f"  Clashes: {c['conflict_text'][:70]}...")

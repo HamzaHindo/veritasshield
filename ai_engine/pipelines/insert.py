@@ -68,7 +68,7 @@ def insert_document(
     # 5. Write Clause nodes + HAS edges
     new_clauses = []
     for i, (text, emb) in enumerate(zip(clause_texts, embeddings)):
-        clause_id = f'{doc.document_id}_c{i}'
+        clause_id = (doc.document_id * 1000) + i
         db.create_clause(
             clause_id   = clause_id,
             doc_id      = doc.document_id,

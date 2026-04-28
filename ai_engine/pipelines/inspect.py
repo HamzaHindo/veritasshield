@@ -39,7 +39,7 @@ def inspect_document(
 
     # Build temporary in-memory clause objects (never touch Neo4j)
     temp_clauses = [
-        {'id': f'temp_{i}', 'text': text, 'embedding': emb.tolist()}
+        {'id': -(i+1), 'text': text, 'embedding': emb.tolist()} # -1, -2, -3... temp IDs
         for i, (text, emb) in enumerate(zip(clause_texts, embeddings))
     ]
 
