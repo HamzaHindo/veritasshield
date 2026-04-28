@@ -1,0 +1,11 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+sentence-transformers
+neo4j
+numpy
+uuid
+datetime
+typing
+dataclasses
+python-dotenv
+scikit-learn
