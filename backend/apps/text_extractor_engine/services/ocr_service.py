@@ -14,4 +14,4 @@ class OCRService:
         if result:
             confidence = sum(line[2] for line in result) / len(result)
 
-        return {"text": "\n".join(text_parts), "confidence": confidence}
+        return "\n".join(text_parts)

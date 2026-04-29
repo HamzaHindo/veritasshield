@@ -3,8 +3,10 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+PROJECT_ROOT = BASE_DIR.parent
+sys.path.append(str(PROJECT_ROOT))
 
 
 # Quick-start development settings - unsuitable for production
@@ -24,8 +26,8 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     "apps.files",
     "apps.users",
-    # "apps.contracts",
-    # "apps.clauses",
+    "apps.analysis",
+    "apps.clauses",
     "apps.text_extractor_engine",
     "apps.authentication",
     "rest_framework_simplejwt.token_blacklist",

@@ -24,6 +24,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("files/", include("apps.files.urls")),
     path("auth/", include("apps.authentication.urls")),
-    path("ocr/", include("apps.text_extractor_engine.api.urls")),
+    path("", include("apps.analysis.urls")),
+    # path("ocr/", include("apps.text_extractor_engine.api.urls")),
     path("clauses/", include("apps.clauses.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

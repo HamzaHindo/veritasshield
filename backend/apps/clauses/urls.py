@@ -1,8 +1,11 @@
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from .views import ClauseViewSet
+from .views import ClauseAnalysisView
 
-router = DefaultRouter()
-router.register(r"clauses", ClauseViewSet, basename="clause")
-
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "<int:clause_id>/",
+        ClauseAnalysisView.as_view(),
+        name="clause-analysis",
+    ),
+]

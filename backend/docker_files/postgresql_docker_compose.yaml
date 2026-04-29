@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgresql:
+    image: REGISTRY_NAME/bitnami/postgresql:latest  # Replace REGISTRY_NAME with docker.io or your registry
+    container_name: postgresql-bitnami
+    restart: unless-stopped
+    user: "1001:1001"  # Bitnami non-root UID/GID - REQUIRED for volume permissions
+    environment:
+      # 🔐 Authentication (REQUIRED - change these!)
+      - POSTGRESQL_USERNAME=hamza_admin
+      - POSTGRESQL_PASSWORD=hamza
+      - POSTGRESQL_DATABASE=veritassheild
+      - POSTGRESQL_POSTGRES_PASSWORD=hamza  # Password for 'postgres' superuser
+
+      # 🔌 Network & Port
+      - POSTGRESQL_PORT_NUMBER=5432
+      - POSTGRESQL_ALLOW_REMOTE_CONNECTIONS=yes
+
+      # ⚙️ Performance & Logging (Optional but Recommended)
+      - POSTGRESQL_MAX_CONNECTIONS=100
+      - POSTGRESQL_SHARED_PRELOAD_LIBRARIES=pg_stat_statements,pgaudit
+      - POSTGRESQL_PGAUDIT_LOG=read,write
+      - POSTGRESQL_LOG_CONNECTIONS=yes
+      - POSTGRESQL_LOG_DISCONNECTIONS=yes
+
+      # 🔐 TLS/SSL (Optional - for production)
+      # - POSTGRESQL_ENABLE_TLS=yes
+      # - POSTGRESQL_TLS_CERT_FILE=/certs/server.crt
+      # - POSTGRESQL_TLS_KEY_FILE=/certs/server.key
+      # - POSTGRESQL_TLS_CA_FILE=/certs/ca.crt
+
+      # 🔄 Replication (Optional)
+      # - POSTGRESQL_REPLICATION_MODE=master
+      # - POSTGRESQL_REPLICATION_USER=repl_user
+      # - POSTGRESQL_REPLICATION_PASSWORD=repl_secure_password
+
+    ports:
+      - "5432:5432"
+    volumes:
+      # ✅ Persistence (Bitnami requires mounting at /bitnami/postgresql)
+      - pg_bitnami:/bitnami/postgresql
+      # ✅ Init scripts (run on first startup only)
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      # ✅ Custom config overrides (optional)
+      - ./conf:/bitnami/postgresql/conf:ro
+      # ✅ TLS certificates (if enabling TLS)
+      # - ./certs:/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
