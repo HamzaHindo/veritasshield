@@ -1,6 +1,16 @@
 # VeritasShield - Python Dependencies
 # -------------------------------------------------
 # Install with:  pip install -r requirements.txt
+#
+# NOTE: PyTorch is pulled from the CUDA 12.6 wheel index.
+#       The --extra-index-url directive below ensures pip still
+#       falls back to PyPI for all other packages.
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# --- PyTorch (CUDA 12.6) ---
+torch>=2.3.0
+torchvision>=0.18.0
 
 # --- Web Framework & API ---
 Django>=5.0,<6.0
@@ -10,6 +20,7 @@ djangorestframework-simplejwt>=5.3.0
 # --- Databases ---
 psycopg2-binary>=2.9.9          # PostgreSQL adapter (django.db.backends.postgresql)
 neo4j>=5.15.0                   # Neo4j graph database driver
+dj-database-url>=2.0.0          # DATABASE_URL configuration helper
 
 # --- ML / NLP / Embeddings ---
 sentence-transformers>=2.2.0    # all-MiniLM-L6-v2 embedding model
