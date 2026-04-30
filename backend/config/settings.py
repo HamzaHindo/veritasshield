@@ -4,7 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv('.env.local')
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,10 +15,10 @@ sys.path.append(os.path.join(BASE_DIR, "..", "ai_logic"))
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-e*fsieuss(qm%55e)4=l_o^ew_+z(=p%8lw8h%^ui011d##b*4"
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", False)
 
 ALLOWED_HOSTS = []
 
@@ -154,7 +154,7 @@ GOOGLE_OAUTH2_CLIENT_ID = (
     "910942014818-8el8jejjpjsmh8mje34l6trb8t14fe50.apps.googleusercontent.com"
 )
 SITE_ID = 1
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost", "127.0.0.1").split(",")
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = "email"
