@@ -4,18 +4,18 @@
 **Referenced Files in This Document**
 - [settings.py](file://config/settings.py)
 - [urls.py](file://config/urls.py)
-- [models.py (files)](file://apps/files/models.py)
-- [models.py (users)](file://apps/users/models.py)
-- [views.py (authentication)](file://apps/authentication/views.py)
-- [views.py (analysis)](file://apps/analysis/views.py)
-- [views.py (files)](file://apps/files/views.py)
-- [serializers.py (files)](file://apps/files/serializers.py)
-- [serializers.py (analysis)](file://apps/analysis/serializers.py)
 - [document_services.py](file://apps/files/services/document_services.py)
+- [document_models.py](file://apps/files/models.py)
 - [analysis_service.py](file://apps/analysis/services/analysis_service.py)
-- [extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
 - [pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
+- [ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
+- [files_urls.py](file://apps/files/urls.py)
+- [analysis_urls.py](file://apps/analysis/urls.py)
+- [clauses_urls.py](file://apps/clauses/urls.py)
+- [authentication_urls.py](file://apps/authentication/urls.py)
+- [clause_service.py](file://apps/clauses/services/clause_service.py)
+- [docker_postgres.yaml](file://docker_files/postgresql_docker_compose.yaml)
+- [docker_neo4j.yaml](file://docker_files/neo4j_docker_compose.yaml)
 </cite>
 
 ## Table of Contents
@@ -24,316 +24,340 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
+6. [Dependency Analysis](#dependency-dependencies)
 7. [Performance Considerations](#performance-considerations)
 8. [Troubleshooting Guide](#troubleshooting-guide)
 9. [Conclusion](#conclusion)
 
 ## Introduction
-VeritasShield is a contract analysis and document processing platform designed to automate legal document analysis using OCR technology and AI pipelines. It enables legal professionals and organizations to efficiently upload, extract text from, analyze, and manage contracts while detecting potential conflicts and identifying similar clauses across a knowledge graph.
+Veritas Shield is an AI-powered legal document processing platform designed to automate contract lifecycle tasks through intelligent text extraction, clause analysis, and knowledge graph integration. Built for legal professionals and legal tech teams, it accelerates contract review, identifies potential risks, and enables scalable contract analytics using modern AI/ML pipelines and graph databases.
 
-Key capabilities include:
-- User authentication and session management
-- Secure document upload and storage
-- Multi-format text extraction (PDF and images) via OCR
-- Contract clause extraction and classification
-- Knowledge graph integration for structured contract insights
-- Conflict detection and similarity analysis
-
-Target audience:
-- Legal teams and paralegals
-- Compliance officers
-- Corporate legal departments
-- Law firms managing large volumes of contracts
-
-Real-world impact:
-- Reduces manual effort in contract review
-- Standardizes clause analysis and comparison
-- Identifies inconsistencies and risks early
-- Accelerates contract onboarding and renewal cycles
+Key positioning:
+- Legal document automation: Reduces manual effort in contract ingestion, parsing, and analysis.
+- AI-driven insights: Employs OCR, NLP-based clause extraction, and similarity/conflict detection.
+- Graph-backed knowledge: Stores structured relationships between documents, clauses, parties, and obligations for advanced querying and discovery.
+- Developer-friendly stack: Django REST Framework backend with modular services and Dockerized infrastructure.
 
 ## Project Structure
-The backend is a Django application with Django REST Framework APIs. The system is organized into modular apps that encapsulate distinct responsibilities:
-- Authentication: User registration, login, logout, and JWT token lifecycle
-- Users: Custom user model and profile-related operations
-- Files: Document model, upload handling, and CRUD operations
-- Text Extractor Engine: OCR and PDF-to-image conversion services
-- Analysis: Orchestration of OCR, AI inspection, and knowledge graph insertion
+The backend follows a Django app-centric structure with clear separation of concerns:
+- apps/files: Document ingestion, persistence, and metadata management.
+- apps/analysis: Orchestration of end-to-end analysis workflows.
+- apps/clauses: Clause-level analytics and retrieval.
+- apps/text_extractor_engine: OCR and PDF image conversion utilities.
+- apps/authentication: User registration, login, and JWT token management.
+- config: Django settings, URL routing, WSGI/ASGI applications.
+- docker_files: Compose configurations for PostgreSQL and Neo4j.
 
 ```mermaid
 graph TB
 subgraph "Django Apps"
-AUTH["apps/authentication"]
-USERS["apps/users"]
-FILES["apps/files"]
-OCR["apps/text_extractor_engine"]
-ANALYSIS["apps/analysis"]
+A["apps/files"]
+B["apps/analysis"]
+C["apps/clauses"]
+D["apps/text_extractor_engine"]
+E["apps/authentication"]
 end
-subgraph "External Services"
-DB["PostgreSQL"]
-KG["Neo4j"]
+subgraph "Config"
+F["config/settings.py"]
+G["config/urls.py"]
 end
-AUTH --> USERS
-USERS --> FILES
-FILES --> OCR
-FILES --> ANALYSIS
-ANALYSIS --> OCR
-ANALYSIS --> DB
-ANALYSIS --> KG
+subgraph "Infrastructure"
+H["PostgreSQL"]
+I["Neo4j"]
+end
+F --> A
+F --> B
+F --> C
+F --> D
+F --> E
+G --> A
+G --> B
+G --> C
+G --> D
+G --> E
+A --> H
+B --> I
+C --> I
+D --> D
+E --> E
 ```
 
 **Diagram sources**
-- [settings.py:26-39](file://config/settings.py#L26-L39)
-- [urls.py:23-30](file://config/urls.py#L23-L30)
-- [document_services.py:14-21](file://apps/files/services/document_services.py#L14-L21)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
+- [urls.py:1-200](file://config/urls.py#L1-L200)
 
 **Section sources**
-- [settings.py:26-39](file://config/settings.py#L26-L39)
-- [urls.py:23-30](file://config/urls.py#L23-L30)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
+- [settings.py:75-84](file://config/settings.py#L75-L84)
 
 ## Core Components
-- Authentication and Authorization
-  - JWT-based authentication with refresh token blacklist support
-  - Registration, login, and logout endpoints
-  - Session middleware and permission enforcement
-
 - Document Management
-  - Document model with metadata (extension, language, timestamps)
-  - File upload validation and storage under media/contracts
-  - Admin-only document management interface
+  - Purpose: Persist uploaded contracts, track metadata, and maintain raw text for downstream processing.
+  - Implementation: Document model stores file path, user ownership, extension, timestamps, language, OCR-extracted text, confidence score, and optional signing date.
+  - Integration: Used by analysis and clause services to coordinate processing and retrieval.
 
-- OCR and Text Extraction
-  - PDF-to-image conversion for scanned documents
-  - EasyOCR-powered text extraction with confidence scoring
-  - Unified extraction pipeline supporting multiple formats
+- Text Extraction Engine
+  - Purpose: Convert PDFs to images and extract readable text via OCR for unstructured documents.
+  - Implementation: PDFService converts pages to images; OCRService reads text and computes average confidence.
 
-- AI-Powered Analysis
-  - Clause extraction and classification
-  - Similarity matching and conflict detection
-  - Knowledge graph insertion and retrieval
+- Clause Analysis Pipeline
+  - Purpose: Extract, classify, and analyze contract clauses; detect conflicts and similarities; integrate with the knowledge graph.
+  - Implementation: DocumentService orchestrates extraction, classification, similarity checks, conflict detection, and graph insertion/inspection.
 
 - Knowledge Graph Integration
-  - Neo4j connection for storing and querying contract relationships
-  - Structured representation of clauses, documents, and conflicts
+  - Purpose: Store and query structured relationships among contracts, clauses, parties, and obligations.
+  - Implementation: Neo4j connection used by DocumentService for insert/inspect operations.
+
+- Authentication and Authorization
+  - Purpose: Secure user access with JWT-based authentication and logout support.
+  - Implementation: SimpleJWT integration with custom login/register/logout views.
 
 **Section sources**
-- [views.py (authentication):14-74](file://apps/authentication/views.py#L14-L74)
-- [models.py (files):5-17](file://apps/files/models.py#L5-L17)
-- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
+- [document_models.py:5-17](file://apps/files/models.py#L5-L17)
 - [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
-- [analysis_service.py:16-50](file://apps/analysis/services/analysis_service.py#L16-L50)
-- [document_services.py:14-62](file://apps/files/services/document_services.py#L14-L62)
+- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
+- [document_services.py:16-83](file://apps/files/services/document_services.py#L16-L83)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
 
 ## Architecture Overview
-The system follows a layered architecture:
-- Presentation Layer: Django REST Framework views and serializers
-- Application Layer: Services orchestrating OCR, AI pipelines, and persistence
-- Data Access Layer: Django ORM for PostgreSQL and Neo4j driver for knowledge graph
-- External Integrations: EasyOCR for text extraction, Neo4j for graph storage
+The system is a layered Django REST platform with AI/ML and graph database integrations:
+- API Layer: Views and routers expose endpoints for document upload, inspection, saving, clause analysis, and authentication.
+- Service Layer: Coordinators orchestrate workflows, calling OCR, extraction, classification, similarity, and conflict detection.
+- Data Access: Django ORM persists documents; Neo4j stores knowledge graph entities and relationships.
+- Infrastructure: PostgreSQL for relational data; Neo4j for graph storage; Docker compose files for local deployment.
 
 ```mermaid
 graph TB
-Client["Client"]
-Auth["Authentication Views"]
-FilesAPI["Files Views"]
-AnalysisAPI["Analysis Views"]
-DocSvc["DocumentService"]
-OCR["ExtractTextService"]
-OCREngine["OCRService"]
-PDFConv["PDFService"]
-PG["PostgreSQL"]
-NG["Neo4j"]
-Client --> Auth
-Client --> FilesAPI
-Client --> AnalysisAPI
-AnalysisAPI --> DocSvc
-FilesAPI --> DocSvc
-DocSvc --> OCR
-OCR --> PDFConv
-OCR --> OCREngine
-DocSvc --> PG
-DocSvc --> NG
+Client["Legal Tech Client / Frontend"]
+API["Django REST API"]
+Files["Files App<br/>Documents, Uploads"]
+Analysis["Analysis App<br/>End-to-end Workflows"]
+Clauses["Clauses App<br/>Clause Analytics"]
+TextEngine["Text Extractor Engine<br/>PDF -> Images -> OCR"]
+Services["DocumentService / ClauseService"]
+Postgres["PostgreSQL"]
+Neo4j["Neo4j"]
+Client --> API
+API --> Files
+API --> Analysis
+API --> Clauses
+Analysis --> TextEngine
+Analysis --> Services
+Files --> Postgres
+Services --> Neo4j
+Services --> Postgres
 ```
 
 **Diagram sources**
-- [views.py (analysis):15-100](file://apps/analysis/views.py#L15-L100)
-- [views.py (files):8-12](file://apps/files/views.py#L8-L12)
-- [views.py (authentication):14-74](file://apps/authentication/views.py#L14-L74)
-- [document_services.py:14-62](file://apps/files/services/document_services.py#L14-L62)
-- [extract_text.py:5-27](file://apps/text_extractor_engine/services/extract_text.py#L5-L27)
-- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
-- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [files_urls.py:6-28](file://apps/files/urls.py#L6-L28)
+- [analysis_urls.py:5-8](file://apps/analysis/urls.py#L5-L8)
+- [clauses_urls.py:5-11](file://apps/clauses/urls.py#L5-L11)
+- [authentication_urls.py:8-14](file://apps/authentication/urls.py#L8-L14)
+- [document_services.py:16-83](file://apps/files/services/document_services.py#L16-L83)
+- [analysis_service.py:18-89](file://apps/analysis/services/analysis_service.py#L18-L89)
 
 ## Detailed Component Analysis
 
-### Authentication and User Management
-- Custom user model with email-based authentication
-- JWT pair generation and refresh token blacklist
-- Registration with duplicate email prevention
-- Logout by blacklisting refresh tokens
+### Document Management
+- Responsibilities
+  - Accept file uploads with metadata (title, language, extension).
+  - Persist documents and update with OCR-derived text.
+  - Provide retrieval for analysis and clause association.
+
+- Data Model Highlights
+  - Fields include file path, user foreign key, extension, timestamps, language, raw text, confidence, and optional signing date.
+
+- API Surface
+  - List/create/retrieve/update/delete documents.
+  - Dedicated upload endpoint.
 
 ```mermaid
-sequenceDiagram
-participant C as "Client"
-participant R as "RegisterView"
-participant U as "User Model"
-participant T as "JWT Tokens"
-C->>R : POST /auth/register/
-R->>U : create_user(email, password)
-U-->>R : User created
-R->>T : RefreshToken.for_user(user)
-T-->>R : access + refresh tokens
-R-->>C : {access, refresh}
+classDiagram
+class Document {
++uuid id
++FileField file
++ForeignKey user
++CharField file_extension
++DateTimeField uploaded_at
++DateTimeField signed_at
++CharField lang
++TextField raw_text
++FloatField confidence
++CharField title
+}
 ```
 
 **Diagram sources**
-- [views.py (authentication):14-42](file://apps/authentication/views.py#L14-L42)
-- [models.py (users):29-46](file://apps/users/models.py#L29-L46)
+- [document_models.py:5-17](file://apps/files/models.py#L5-L17)
 
 **Section sources**
-- [views.py (authentication):14-74](file://apps/authentication/views.py#L14-L74)
-- [models.py (users):29-46](file://apps/users/models.py#L29-L46)
-- [settings.py:143-143](file://config/settings.py#L143-L143)
+- [document_models.py:5-17](file://apps/files/models.py#L5-L17)
+- [files_urls.py:6-28](file://apps/files/urls.py#L6-L28)
 
-### Document Upload and Storage
-- File validation for supported formats
-- Automatic metadata derivation (extension, language)
-- Storage under media/contracts with unique filenames
-- Admin-only document management
+### Text Extraction Engine
+- Responsibilities
+  - Convert PDFs to page images for OCR processing.
+  - Extract text from images and compute average confidence.
 
-```mermaid
-flowchart TD
-Start(["Upload Request"]) --> Validate["Validate File Type"]
-Validate --> Valid{"Valid?"}
-Valid --> |No| Error["Return Validation Error"]
-Valid --> |Yes| Save["Save to Media Directory"]
-Save --> Metadata["Derive Extension/Language"]
-Metadata --> Done(["Document Stored"])
-Error --> Done
-```
-
-**Diagram sources**
-- [serializers.py (files):48-52](file://apps/files/serializers.py#L48-L52)
-- [models.py (files):5-17](file://apps/files/models.py#L5-L17)
-
-**Section sources**
-- [serializers.py (files):32-61](file://apps/files/serializers.py#L32-L61)
-- [models.py (files):5-17](file://apps/files/models.py#L5-L17)
-- [views.py (files):8-12](file://apps/files/views.py#L8-L12)
-
-### OCR and Text Extraction Pipeline
-- PDFs are converted to images per page
-- Each page is processed via EasyOCR to extract text
-- Confidence computed as average of per-line confidence scores
-- Unified extraction method supports PDF and image formats
+- Processing Flow
+  - PDFService: Page-by-page conversion to images.
+  - OCRService: Text extraction and confidence aggregation.
 
 ```mermaid
 flowchart TD
-Entry(["Extract Text"]) --> CheckType{"File is PDF?"}
-CheckType --> |Yes| PDFToImages["Convert PDF to Images"]
-PDFToImages --> LoopPages["For Each Page"]
-LoopPages --> OCR["OCRService.extract(image)"]
-OCR --> Accumulate["Accumulate Text"]
-CheckType --> |No| DirectOCR["OCRService.extract(file)"]
-Accumulate --> Return["Return Combined Text"]
-DirectOCR --> Return
+Start(["Upload Contract"]) --> PDFToImages["Convert PDF to Images"]
+PDFToImages --> OCR["Perform OCR per Image"]
+OCR --> Aggregate["Aggregate Text and Confidence"]
+Aggregate --> SaveText["Attach Raw Text to Document"]
+SaveText --> End(["Ready for Analysis"])
 ```
 
 **Diagram sources**
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
-- [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
-
-**Section sources**
-- [extract_text.py:5-27](file://apps/text_extractor_engine/services/extract_text.py#L5-L27)
 - [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
 - [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
 
-### AI Analysis and Knowledge Graph Integration
-- End-to-end workflow: upload → OCR → inspection → insert
-- Uses clause extractor and classifier
-- Leverages similarity engine and conflict detector
-- Stores results in Neo4j for relationship queries
+**Section sources**
+- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
+
+### Clause Analysis and Knowledge Graph Integration
+- Responsibilities
+  - Extract and classify contract clauses.
+  - Detect conflicts and identify similar clauses.
+  - Insert documents and clauses into the knowledge graph.
+  - Inspect existing documents for analysis results.
+
+- Orchestration
+  - AnalysisService coordinates document creation, OCR, and graph inspection/insertion.
+  - DocumentService composes extraction, classification, similarity, and conflict detection.
 
 ```mermaid
 sequenceDiagram
-participant C as "Client"
-participant AV as "AnalyzeView"
-participant AS as "AnalysisService"
-participant DS as "DocumentService"
-participant OCR as "ExtractTextService"
-participant DB as "PostgreSQL"
-participant KG as "Neo4j"
-C->>AV : POST /analyze/ (multipart/form-data)
-AV->>AS : inspect_uploaded_file(user, file, title, lang)
-AS->>DS : create_document(user, file_data)
-DS->>DB : save Document
-AS->>OCR : extract_text(document.file.path)
-OCR-->>AS : raw_text
-AS->>DS : inspect_document(DocumentInput)
-DS->>KG : analyze and return results
-DS-->>AS : AnalysisResult
-AS-->>AV : AnalysisResult
-AV-->>C : JSON result
+participant Client as "Client"
+participant API as "AnalysisService"
+participant Files as "DocumentService"
+participant OCR as "OCR/PDF Services"
+participant Graph as "Neo4j"
+Client->>API : "POST /analyze"
+API->>Files : "create_document()"
+API->>OCR : "extract_text()"
+API->>Files : "inspect_document(DocumentInput)"
+Files->>Graph : "Query/Analyze"
+Graph-->>Files : "Results"
+Files-->>API : "AnalysisResult"
+API-->>Client : "AnalysisResponse"
 ```
 
 **Diagram sources**
-- [views.py (analysis):22-56](file://apps/analysis/views.py#L22-L56)
-- [analysis_service.py:19-50](file://apps/analysis/services/analysis_service.py#L19-L50)
-- [document_services.py:46-62](file://apps/files/services/document_services.py#L46-L62)
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
+- [analysis_service.py:18-59](file://apps/analysis/services/analysis_service.py#L18-L59)
+- [document_services.py:48-64](file://apps/files/services/document_services.py#L48-L64)
 
 **Section sources**
-- [views.py (analysis):15-100](file://apps/analysis/views.py#L15-L100)
-- [analysis_service.py:16-81](file://apps/analysis/services/analysis_service.py#L16-L81)
-- [document_services.py:14-62](file://apps/files/services/document_services.py#L14-L62)
+- [analysis_service.py:18-89](file://apps/analysis/services/analysis_service.py#L18-L89)
+- [document_services.py:16-83](file://apps/files/services/document_services.py#L16-L83)
+- [clause_service.py:4-19](file://apps/clauses/services/clause_service.py#L4-L19)
+
+### Authentication and Authorization
+- Responsibilities
+  - User registration, login, logout, and token refresh.
+  - JWT-based authentication for protected endpoints.
+
+- Integration
+  - SimpleJWT configured with access/refresh lifetimes and bearer tokens.
+
+```mermaid
+sequenceDiagram
+participant Client as "Client"
+participant Auth as "Authentication Views"
+participant JWT as "SimpleJWT"
+Client->>Auth : "POST /login"
+Auth->>JWT : "Issue access/refresh tokens"
+JWT-->>Auth : "Tokens"
+Auth-->>Client : "Credentials"
+Client->>Auth : "POST /refresh"
+Auth->>JWT : "Refresh tokens"
+JWT-->>Auth : "New tokens"
+```
+
+**Diagram sources**
+- [authentication_urls.py:8-14](file://apps/authentication/urls.py#L8-L14)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
+
+**Section sources**
+- [authentication_urls.py:8-14](file://apps/authentication/urls.py#L8-L14)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
 
 ## Dependency Analysis
-- App wiring: installed apps define module dependencies
-- URL routing: top-level URLs include app-specific namespaces
-- Authentication: JWT settings and custom user model
-- Data persistence: PostgreSQL for relational data, Neo4j for graph data
-- OCR pipeline: EasyOCR and pdf2image dependencies
+- Internal Dependencies
+  - AnalysisService depends on DocumentService, OCR/PDF services, and Document model.
+  - DocumentService depends on AI pipeline components and Neo4j connection.
+  - ClauseService depends on clause repository for graph queries.
+
+- External Dependencies
+  - Django REST Framework and SimpleJWT for API and auth.
+  - PostgreSQL for relational persistence.
+  - Neo4j for knowledge graph storage.
 
 ```mermaid
 graph LR
-Settings["settings.py INSTALLED_APPS"] --> AuthApp["apps/authentication"]
-Settings --> UsersApp["apps/users"]
-Settings --> FilesApp["apps/files"]
-Settings --> OCRApp["apps/text_extractor_engine"]
-Settings --> AnalysisApp["apps/analysis"]
-URLs["config/urls.py"] --> FilesURLs["apps/files/urls.py"]
-URLs --> AuthURLs["apps/authentication/urls.py"]
-URLs --> AnalysisURLs["apps/analysis/urls.py"]
+Analysis["AnalysisService"] --> FilesSvc["DocumentService"]
+Analysis --> OCR["OCR/PDF Services"]
+FilesSvc --> Neo4j["Neo4j"]
+FilesSvc --> Postgres["PostgreSQL"]
+ClauseSvc["ClauseService"] --> Neo4j
 ```
 
 **Diagram sources**
-- [settings.py:26-39](file://config/settings.py#L26-L39)
-- [urls.py:23-30](file://config/urls.py#L23-L30)
+- [analysis_service.py:14-15](file://apps/analysis/services/analysis_service.py#L14-L15)
+- [document_services.py:16-22](file://apps/files/services/document_services.py#L16-L22)
+- [clause_service.py](file://apps/clauses/services/clause_service.py#L1)
 
 **Section sources**
-- [settings.py:74-83](file://config/settings.py#L74-L83)
-- [settings.py:124-142](file://config/settings.py#L124-L142)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
 
 ## Performance Considerations
-- OCR throughput: Batch pages and process in parallel where feasible
-- PDF conversion: Limit resolution and page count for large documents
-- Database writes: Use bulk operations for clause inserts
-- Graph queries: Index nodes and relationships on frequently queried fields
-- Caching: Cache extracted text and similarity results for repeated queries
+- OCR and PDF Processing
+  - Batch page conversion and parallel OCR can improve throughput for multi-page documents.
+  - Cache OCR results per page to avoid redundant processing.
+
+- Graph Operations
+  - Use transactional writes and indexing on frequently queried nodes/relationships.
+  - Limit similarity/conflict scans to relevant subsets of the graph.
+
+- Storage and Media
+  - Store original files efficiently and consider compression for large contracts.
+  - Offload media to cloud storage in production environments.
+
+- API Design
+  - Paginate clause lists and limit concurrent analysis jobs.
+  - Implement rate limiting for upload and analysis endpoints.
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- Authentication failures: Verify JWT settings and ensure refresh tokens are properly blacklisted
-- File upload errors: Confirm supported extensions and MEDIA_ROOT permissions
-- OCR extraction failures: Validate EasyOCR language packs and PDF-to-image conversion
-- Knowledge graph errors: Check Neo4j connectivity and schema consistency
-- Analysis timeouts: Monitor OCR latency and adjust concurrency limits
+- Authentication Issues
+  - Verify JWT configuration and ensure clients send Bearer tokens.
+  - Confirm refresh token lifetime and blacklisting settings.
+
+- OCR Failures
+  - Validate PDF conversion and image quality.
+  - Check OCR language packs and fallback strategies.
+
+- Graph Connectivity
+  - Confirm Neo4j credentials and connectivity.
+  - Review transaction boundaries and error handling in graph operations.
+
+- Database Persistence
+  - Ensure PostgreSQL is reachable and migrations are applied.
+  - Verify MEDIA_ROOT permissions for file uploads.
 
 **Section sources**
-- [views.py (authentication):45-69](file://apps/authentication/views.py#L45-L69)
-- [serializers.py (files):48-52](file://apps/files/serializers.py#L48-L52)
-- [views.py (analysis):52-56](file://apps/analysis/views.py#L52-L56)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
+- [docker_postgres.yaml:1-200](file://docker_files/postgresql_docker_compose.yaml#L1-L200)
+- [docker_neo4j.yaml:1-200](file://docker_files/neo4j_docker_compose.yaml#L1-L200)
 
 ## Conclusion
-VeritasShield streamlines contract lifecycle management by combining robust document ingestion, accurate OCR-based text extraction, and intelligent AI analysis with a knowledge graph. Its modular Django architecture, clear separation of concerns, and integration points enable legal teams to scale contract review, maintain compliance, and reduce risk through automation.
+Veritas Shield positions itself as a modern legal tech platform that automates contract ingestion, extraction, and analysis while building a knowledge graph for intelligent discovery. Its Django-based architecture, modular services, and Dockerized infrastructure enable rapid iteration and scalability. By combining OCR, clause extraction/classification, similarity/conflict detection, and graph storage, it offers legal teams a powerful foundation for contract lifecycle automation and risk management.

@@ -2,20 +2,18 @@
 
 <cite>
 **Referenced Files in This Document**
-- [models.py](file://apps/files/models.py)
-- [document_services.py](file://apps/files/services/document_services.py)
-- [serializers.py](file://apps/files/serializers.py)
-- [views.py](file://apps/files/views.py)
-- [urls.py](file://apps/files/urls.py)
-- [0001_initial.py](file://apps/files/migrations/0001_initial.py)
-- [0002_initial.py](file://apps/files/migrations/0002_initial.py)
-- [settings.py](file://config/settings.py)
-- [models.py](file://apps/users/models.py)
-- [pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
-- [ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
-- [extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis_service.py](file://apps/analysis/services/analysis_service.py)
-- [views.py](file://apps/analysis/views.py)
+- [apps/files/models.py](file://apps/files/models.py)
+- [apps/files/migrations/0001_initial.py](file://apps/files/migrations/0001_initial.py)
+- [apps/files/migrations/0002_initial.py](file://apps/files/migrations/0002_initial.py)
+- [apps/files/serializers.py](file://apps/files/serializers.py)
+- [apps/files/views.py](file://apps/files/views.py)
+- [apps/files/urls.py](file://apps/files/urls.py)
+- [apps/files/services/document_services.py](file://apps/files/services/document_services.py)
+- [apps/analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
+- [apps/text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
+- [apps/text_extractor_engine/services/pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
+- [apps/text_extractor_engine/services/ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
+- [apps/clauses/services/clause_service.py](file://apps/clauses/services/clause_service.py)
 </cite>
 
 ## Table of Contents
@@ -31,436 +29,478 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the document management system for VeritasShield. It covers the Document model, file upload and validation, metadata handling, OCR-based text extraction, document processing workflows, and the services that orchestrate storage, metadata extraction, and AI-driven analysis. It also outlines ownership and access controls, filtering/searching/pagination capabilities, and error handling strategies.
+This document describes the document management subsystem of Veritas Shield. It covers the Document model schema, file upload and storage mechanisms, media configuration, supported formats, validation rules, and the document processing pipeline from upload through OCR extraction to AI-powered analysis and clause retrieval. It also documents CRUD operations, batch processing considerations, integration with the AI analysis engine, error handling strategies, and performance guidance for large and concurrent workloads.
 
 ## Project Structure
 The document management system spans several Django apps:
-- files: Defines the Document model, serializers, views, and services for CRUD and upload.
-- analysis: Provides higher-level orchestration for OCR and AI inspection/insertion.
-- text_extractor_engine: Implements OCR and PDF-to-image conversion.
-- users: Defines the user model and authentication integration.
-- config: Central Django settings including media handling and REST framework configuration.
+- files: Defines the Document model, serializers, views, and services for CRUD and clause retrieval.
+- analysis: Provides endpoints and orchestration for analyzing uploaded documents, including OCR text extraction and AI inspection/insertion.
+- text_extractor_engine: Implements OCR and PDF-to-image conversion utilities.
+- clauses: Provides clause-level analysis retrieval.
+- URLs: Wire routes to views and viewsets.
 
 ```mermaid
 graph TB
 subgraph "Files App"
-FM["apps/files/models.py"]
-FS["apps/files/services/document_services.py"]
-FV["apps/files/views.py"]
-FU["apps/files/urls.py"]
-FSR["apps/files/serializers.py"]
+FM["models.Document"]
+FS["serializers.Document*Serializer"]
+FV["views.DocumentViewSet<br/>views.DocumentClausesView"]
+FURL["urls.py"]
+FD["services.DocumentService"]
 end
 subgraph "Analysis App"
-AS["apps/analysis/services/analysis_service.py"]
-AV["apps/analysis/views.py"]
+AS["services.AnalysisService"]
+AU["urls.py"]
 end
 subgraph "Text Extraction Engine"
-EP["apps/text_extractor_engine/services/pdf_service.py"]
-EO["apps/text_extractor_engine/services/ocr_service.py"]
-ET["apps/text_extractor_engine/services/extract_text.py"]
+EX["services.ExtractTextService"]
+PDF["services.PDFService"]
+OCR["services.OCRService"]
 end
-subgraph "Users App"
-UM["apps/users/models.py"]
+subgraph "Clauses App"
+CS["services.ClauseService"]
 end
-CFG["config/settings.py"]
-FV --> FSR
-FV --> FM
-FS --> FM
-AS --> FS
-AS --> ET
-ET --> EP
-ET --> EO
-FV --> FU
-AV --> AS
-FS --> CFG
-AS --> CFG
-FM --> UM
+FURL --> FV
+AU --> AS
+AS --> FM
+AS --> EX
+EX --> PDF
+EX --> OCR
+FV --> FD
+FD --> AS
+CS --> FD
 ```
 
 **Diagram sources**
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [document_services.py:14-81](file://apps/files/services/document_services.py#L14-L81)
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [urls.py:6-23](file://apps/files/urls.py#L6-L23)
-- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
-- [analysis_service.py:16-50](file://apps/analysis/services/analysis_service.py#L16-L50)
-- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
-- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
-- [extract_text.py:5-27](file://apps/text_extractor_engine/services/extract_text.py#L5-L27)
-- [models.py:29-45](file://apps/users/models.py#L29-L45)
-- [settings.py:122-137](file://config/settings.py#L122-L137)
+- [apps/files/urls.py:1-29](file://apps/files/urls.py#L1-L29)
+- [apps/files/views.py:1-35](file://apps/files/views.py#L1-L35)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
+- [apps/files/serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/text_extractor_engine/services/pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+- [apps/text_extractor_engine/services/ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [apps/clauses/services/clause_service.py:1-20](file://apps/clauses/services/clause_service.py#L1-L20)
 
 **Section sources**
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [urls.py:6-23](file://apps/files/urls.py#L6-L23)
-- [settings.py:122-137](file://config/settings.py#L122-L137)
+- [apps/files/urls.py:1-29](file://apps/files/urls.py#L1-L29)
+- [apps/analysis/urls.py:1-9](file://apps/analysis/urls.py#L1-L9)
 
 ## Core Components
-- Document model: Stores file metadata, ownership, timestamps, language, extracted text, confidence, and optional signing date.
-- Serializers: Define which fields are exposed in APIs, read-only fields, and basic validation.
-- Views: Provide CRUD endpoints backed by a ModelViewSet and additional analysis endpoints.
-- Services: Orchestrate document creation, OCR text extraction, and AI inspection/insertion.
-- Text extraction engine: Converts PDFs to images and performs OCR to produce raw text.
-- Users app: Provides the user model referenced by the Document model.
-
-Key model fields and their roles:
-- file: Uploaded file stored under media/contracts/.
-- user: Owner of the document (foreign key to AUTH_USER_MODEL).
-- file_extension: Captured extension for downstream processing.
-- uploaded_at: Timestamp of creation.
-- signed_at: Optional timestamp for signature date.
-- lang: Language hint for processing.
-- raw_text: Extracted text from OCR.
-- confidence: Average OCR confidence score.
-- title: Optional human-readable title.
-
-Validation and parsing:
-- Multi-part parser enabled for file uploads.
-- File type validation in the DocumentCreateSerializer restricts uploads to specific extensions.
-- Media settings define MEDIA_URL and MEDIA_ROOT for serving uploaded files.
+- Document model: Stores file metadata, ownership, language, timestamps, OCR-derived raw text, confidence score, and optional title.
+- Serializers: Control which fields are exposed and writable for create/update operations and apply basic validation.
+- Views and ViewSets: Expose CRUD endpoints and a dedicated clause retrieval endpoint.
+- Services:
+  - DocumentService: Orchestrates AI pipelines for inspection and insertion, and integrates with the knowledge graph.
+  - AnalysisService: Coordinates OCR text extraction and document lifecycle transitions.
+  - ExtractTextService: Converts PDFs to images and performs OCR; cleans extracted text.
+  - ClauseService: Retrieves clause-level analysis details.
 
 **Section sources**
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [settings.py:129-132](file://config/settings.py#L129-L132)
-- [settings.py:122-123](file://config/settings.py#L122-L123)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
+- [apps/files/serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
+- [apps/files/views.py:1-35](file://apps/files/views.py#L1-L35)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/clauses/services/clause_service.py:1-20](file://apps/clauses/services/clause_service.py#L1-L20)
 
 ## Architecture Overview
-The system supports two primary flows:
-- Direct upload flow: Upload a file, extract text via OCR, and optionally analyze via AI pipelines.
-- AI insertion flow: Insert a previously inspected document into the knowledge graph.
+The document lifecycle is:
+1. Upload: Client uploads a file; serializer validates supported formats; model saves metadata.
+2. OCR Extraction: Raw text is extracted from the stored file and persisted.
+3. AI Analysis: The system constructs a DocumentInput and invokes inspection/insertion pipelines.
+4. Clause Retrieval: Clients fetch clause-level insights associated with a document.
 
 ```mermaid
 sequenceDiagram
-participant Client as "Client"
-participant API as "AnalyzeView"
-participant DocSvc as "DocumentService"
-participant Ext as "ExtractTextService"
-participant OCR as "OCRService/PDFService"
-Client->>API : "POST /api/analyze/" with multipart/form-data
-API->>DocSvc : "create_document(user, file_data)"
-DocSvc-->>API : "Document instance"
-API->>Ext : "extract_text(document.file.path)"
-Ext->>OCR : "OCR for images or single image"
-OCR-->>Ext : "raw_text, confidence"
-Ext-->>API : "raw_text"
-API->>DocSvc : "inspect_document(DocumentInput)"
-DocSvc-->>API : "AnalysisResult"
-API-->>Client : "JSON result"
+participant C as "Client"
+participant V as "DocumentViewSet"
+participant S as "DocumentService"
+participant A as "AnalysisService"
+participant T as "ExtractTextService"
+participant M as "Document Model"
+C->>V : "POST /files/documents/" (multipart/form-data)
+V->>M : "create_document(user, file_data)"
+M-->>V : "Document saved"
+V->>A : "inspect_uploaded_file(user, file_obj, title, lang)"
+A->>T : "extract_text(file.path)"
+T-->>A : "raw_text"
+A->>M : "save raw_text"
+A->>S : "inspect_document(DocumentInput)"
+S-->>C : "AnalysisResult"
 ```
 
 **Diagram sources**
-- [views.py:15-42](file://apps/analysis/views.py#L15-L42)
-- [analysis_service.py:18-50](file://apps/analysis/services/analysis_service.py#L18-L50)
-- [document_services.py:22-62](file://apps/files/services/document_services.py#L22-L62)
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
-- [ocr_service.py:7-17](file://apps/text_extractor_engine/services/ocr_service.py#L7-L17)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
+- [apps/files/views.py:1-35](file://apps/files/views.py#L1-L35)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
 
 ## Detailed Component Analysis
 
-### Document Model
-The Document model encapsulates file metadata, ownership, and processing state.
+### Document Model Schema
+The Document model captures essential metadata and state for each uploaded contract or document.
 
 ```mermaid
-classDiagram
-class Document {
-+uuid id
-+FileField file
-+CharField file_extension
-+DateTimeField uploaded_at
-+DateTimeField signed_at
-+CharField lang
-+TextField raw_text
-+FloatField confidence
-+CharField title
-+ForeignKey user
+erDiagram
+DOCUMENT {
+bigint id PK
+file file
+varchar file_extension
+datetime uploaded_at
+datetime signed_at
+varchar lang
+text raw_text
+float confidence
+varchar title
+bigint user_id FK
 }
-class User {
-+uuid id
-+EmailField email
-+CharField name
-+Boolean is_active
-+Boolean is_staff
-}
-Document --> User : "owned by"
 ```
 
-**Diagram sources**
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [models.py:29-45](file://apps/users/models.py#L29-L45)
+Key attributes and behaviors:
+- file: Stored under the configured media root with upload_to="contracts/".
+- user: Foreign key to the AUTH_USER_MODEL; cascading delete ensures cleanup on user removal.
+- file_extension: Captured during creation; used for downstream processing.
+- uploaded_at: Auto-populated on creation.
+- signed_at: Optional timestamp for signing date.
+- lang: Language hint for OCR and NLP.
+- raw_text: OCR-extracted text; populated post-upload.
+- confidence: OCR confidence score; initialized to zero.
+- title: Optional human-readable title.
+
+Supported migrations:
+- Initial creation of Document with core fields.
+- Addition of user foreign key linking to AUTH_USER_MODEL.
 
 **Section sources**
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [0001_initial.py:14-27](file://apps/files/migrations/0001_initial.py#L14-L27)
-- [0002_initial.py:18-22](file://apps/files/migrations/0002_initial.py#L18-L22)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
+- [apps/files/migrations/0001_initial.py:1-29](file://apps/files/migrations/0001_initial.py#L1-L29)
+- [apps/files/migrations/0002_initial.py:1-24](file://apps/files/migrations/0002_initial.py#L1-L24)
 
-### File Upload and Validation
-- Supported formats: The serializer enforces file extensions for upload.
-- Parser support: MultiPartParser enables form-data uploads.
-- Media storage: Files are stored under MEDIA_ROOT/media/contracts/.
+### File Upload and Storage Mechanisms
+- Upload endpoint: POST /files/documents/ creates a Document via the DocumentViewSet.
+- Media configuration: Files are stored under the upload_to path configured on the file field.
+- Validation: The DocumentCreateSerializer restricts uploads to specific extensions.
+
+Validation rules:
+- Supported file types: pdf, jpg, png, jpeg.
+- Additional read-only fields are excluded from client input to prevent tampering.
+
+Storage considerations:
+- Ensure MEDIA_ROOT and appropriate storage backends are configured in Django settings.
+- Large files increase I/O and OCR processing time; consider compression and chunked uploads if extending.
+
+**Section sources**
+- [apps/files/serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
+- [apps/files/views.py:11-14](file://apps/files/views.py#L11-L14)
+- [apps/files/models.py:6-6](file://apps/files/models.py#L6-L6)
+
+### Media Configuration
+- The file field defines upload_to="contracts/", indicating files are stored under the configured media root with a contracts/ subdirectory.
+- No explicit storage backend is defined in the model; defaults depend on Django settings.
+
+Recommendations:
+- Configure DEFAULT_FILE_STORAGE and MEDIA_ROOT appropriately for production environments.
+- Consider cloud storage backends for scalability and durability.
+
+**Section sources**
+- [apps/files/models.py:6-6](file://apps/files/models.py#L6-L6)
+
+### Document Processing Pipeline
+End-to-end flow:
+1. Create Document record with metadata.
+2. Extract raw text using ExtractTextService:
+   - For PDFs: Convert pages to images and OCR each page.
+   - For images: OCR directly.
+   - Clean extracted text by normalizing whitespace and escape sequences.
+3. Persist raw_text to the Document.
+4. Construct DocumentInput and call DocumentService.inspect_document or insert_document.
 
 ```mermaid
 flowchart TD
-Start(["Upload Request"]) --> Parse["Parse multipart/form-data"]
-Parse --> ValidateType["Validate file extension"]
-ValidateType --> TypeOK{"Allowed type?"}
-TypeOK --> |No| ErrType["Return 400: Unsupported file type"]
-TypeOK --> |Yes| SaveDoc["Create Document via serializer.save(user)"]
-SaveDoc --> OCR["Extract text via OCR"]
-OCR --> UpdateDoc["Update raw_text and confidence"]
-UpdateDoc --> Done(["Return created document"])
-ErrType --> Done
+Start(["Upload Received"]) --> CreateDoc["Create Document record"]
+CreateDoc --> ExtText["ExtractTextService.extract_text()"]
+ExtText --> IsPDF{"Is PDF?"}
+IsPDF --> |Yes| PDFtoImg["PDFService.pdf_to_images()"]
+PDFtoImg --> OCRLoop["OCRService.extract() per page"]
+IsPDF --> |No| OCRSingle["OCRService.extract()"]
+OCRLoop --> Merge["Concatenate text"]
+OCRSingle --> Clean["CleanTextService.clean_text()"]
+Merge --> Clean
+Clean --> SaveText["Persist raw_text to Document"]
+SaveText --> BuildInput["Build DocumentInput"]
+BuildInput --> InspectOrInsert["DocumentService.inspect_document()<br/>or insert_document()"]
+InspectOrInsert --> End(["Analysis Result"])
 ```
 
 **Diagram sources**
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [serializers.py:54-60](file://apps/files/serializers.py#L54-L60)
-- [settings.py:129-132](file://config/settings.py#L129-L132)
-- [settings.py:122-123](file://config/settings.py#L122-L123)
+- [apps/analysis/services/analysis_service.py:21-59](file://apps/analysis/services/analysis_service.py#L21-L59)
+- [apps/text_extractor_engine/services/extract_text.py:36-55](file://apps/text_extractor_engine/services/extract_text.py#L36-L55)
+- [apps/text_extractor_engine/services/pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
+- [apps/text_extractor_engine/services/ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
+- [apps/files/services/document_services.py:48-83](file://apps/files/services/document_services.py#L48-L83)
 
 **Section sources**
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [settings.py:129-132](file://config/settings.py#L129-L132)
-- [settings.py:122-123](file://config/settings.py#L122-L123)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/text_extractor_engine/services/pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+- [apps/text_extractor_engine/services/ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
 
-### Document Services
-The DocumentService orchestrates AI pipelines for inspection and insertion, and exposes helpers for creating documents and retrieving clauses.
+### Supported File Formats and Size Limitations
+- Supported formats: pdf, jpg, png, jpeg (validated by serializer).
+- Size limits: Not enforced in the provided code; rely on Django REST Framework parser limits and web server configurations.
+
+Recommendations:
+- Enforce file size limits at the API layer and in storage backends.
+- Consider rate limiting and concurrency caps for OCR processing.
+
+**Section sources**
+- [apps/files/serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
+
+### Document Lifecycle: From Upload to Analysis Completion
+- Upload: POST /files/documents/ with multipart form data.
+- OCR Extraction: AnalysisService orchestrates text extraction and updates raw_text.
+- AI Inspection: DocumentService.inspect_document computes analysis results.
+- Optional Save: DocumentService.insert_document persists results into the knowledge graph.
+- Clause Retrieval: GET /files/documents/{doc_id}/clauses/ returns clause-level insights.
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant AV as "AnalyzeView"
+participant AS as "AnalysisService"
+participant DS as "DocumentService"
+participant CL as "ClauseService"
+U->>AV : "POST /analysis/analyze/"
+AV->>AS : "inspect_uploaded_file(user, file, title, lang)"
+AS->>DS : "create_document(...)"
+AS->>AS : "extract_text(...) and save raw_text"
+AS->>DS : "inspect_document(DocumentInput)"
+DS-->>U : "AnalysisResult"
+U->>CL : "GET /files/documents/{doc_id}/clauses/"
+CL-->>U : "Clauses with conflicts/similarities"
+```
+
+**Diagram sources**
+- [apps/analysis/urls.py:1-9](file://apps/analysis/urls.py#L1-L9)
+- [apps/analysis/services/analysis_service.py:21-59](file://apps/analysis/services/analysis_service.py#L21-L59)
+- [apps/files/services/document_services.py:48-64](file://apps/files/services/document_services.py#L48-L64)
+- [apps/clauses/services/clause_service.py:7-19](file://apps/clauses/services/clause_service.py#L7-L19)
+- [apps/files/urls.py:24-27](file://apps/files/urls.py#L24-L27)
+
+**Section sources**
+- [apps/analysis/urls.py:1-9](file://apps/analysis/urls.py#L1-L9)
+- [apps/files/urls.py:1-29](file://apps/files/urls.py#L1-L29)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/clauses/services/clause_service.py:1-20](file://apps/clauses/services/clause_service.py#L1-L20)
+
+### Practical Examples
+
+- Create a document (upload):
+  - Endpoint: POST /files/documents/
+  - Payload: multipart/form-data with fields file, title, lang, file_extension.
+  - Behavior: Serializer validates extension; model saves metadata; user association handled by view/service.
+
+- Retrieve a document:
+  - Endpoint: GET /files/documents/{id}/
+
+- Update a document:
+  - Endpoint: PUT /files/documents/{id}/
+
+- Delete a document:
+  - Endpoint: DELETE /files/documents/{id}/
+
+- Get clauses for a document:
+  - Endpoint: GET /files/documents/{doc_id}/clauses/
+
+- Analyze and inspect:
+  - Endpoint: POST /analysis/analyze/ (uploads, extracts text, runs inspection)
+
+- Analyze and insert into knowledge graph:
+  - Endpoint: POST /analysis/analyze/save/ (requires prior inspection to populate raw_text)
+
+Notes:
+- Authentication and permissions vary by endpoint; ensure proper headers and tokens are included.
+- For batch processing, iterate over multiple uploads and analyze sequentially or in controlled concurrency.
+
+**Section sources**
+- [apps/files/urls.py:6-28](file://apps/files/urls.py#L6-L28)
+- [apps/files/views.py:11-35](file://apps/files/views.py#L11-L35)
+- [apps/analysis/urls.py:5-8](file://apps/analysis/urls.py#L5-L8)
+- [apps/analysis/services/analysis_service.py:21-59](file://apps/analysis/services/analysis_service.py#L21-L59)
+- [apps/files/services/document_services.py:85-112](file://apps/files/services/document_services.py#L85-L112)
+
+### Integration with AI Analysis Engine
+- DocumentService delegates inspection and insertion to AI pipelines.
+- ExtractTextService supplies raw_text to DocumentInput for analysis.
+- Results include clause extractions, classifications, similarity checks, and conflict detection.
 
 ```mermaid
 classDiagram
 class DocumentService {
-+insert_document(doc) AnalysisResult
-+inspect_document(doc) AnalysisResult
-+upload_document(doc) Document
-+create_document(user, file_data) Document
-+get_document_clauses(doc_id) List[Dict]
-+get_clause_analysis(clause_id) Dict|None
++insert_document(doc)
++inspect_document(doc)
++upload_document(doc)
++create_document(user, file_data)
++get_document_clauses(doc_id)
 }
 class AnalysisService {
-+inspect_uploaded_file(user, file_obj, title, lang) AnalysisResult
-+insert_uploaded_file(user, doc_id) AnalysisResult
++inspect_uploaded_file(user, file_obj, title, lang)
++insert_uploaded_file(user, doc_id)
 }
-DocumentService <.. AnalysisService : "used by"
-```
-
-**Diagram sources**
-- [document_services.py:14-81](file://apps/files/services/document_services.py#L14-L81)
-- [analysis_service.py:16-80](file://apps/analysis/services/analysis_service.py#L16-L80)
-
-**Section sources**
-- [document_services.py:14-81](file://apps/files/services/document_services.py#L14-L81)
-- [analysis_service.py:16-80](file://apps/analysis/services/analysis_service.py#L16-L80)
-
-### Text Extraction Engine
-The extraction pipeline converts PDFs to images and runs OCR, aggregating text and computing average confidence.
-
-```mermaid
-flowchart TD
-A["extract_text(file_path)"] --> CheckPDF{"Ends with .pdf?"}
-CheckPDF --> |Yes| ToImages["PDFService.pdf_to_images()"]
-ToImages --> Loop["For each page image"]
-Loop --> OCR["OCRService.extract()"]
-OCR --> Merge["Concatenate text and compute avg confidence"]
-CheckPDF --> |No| OCRSingle["OCRService.extract() on image"]
-OCRSingle --> Merge
-Merge --> Return["Return raw_text"]
-```
-
-**Diagram sources**
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
-- [ocr_service.py:7-17](file://apps/text_extractor_engine/services/ocr_service.py#L7-L17)
-
-**Section sources**
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
-- [ocr_service.py:7-17](file://apps/text_extractor_engine/services/ocr_service.py#L7-L17)
-
-### CRUD Operations and Access Controls
-- CRUD endpoints: The DocumentViewSet exposes list/create/retrieve/update/delete actions.
-- Authentication: JWT is configured as the default authentication class.
-- Authorization: The DocumentViewSet currently requires admin users; adjust as needed for role-based access.
-- Pagination and filtering: Not explicitly implemented in the provided files; consider adding filters and pagination in views or serializers.
-
-```mermaid
-sequenceDiagram
-participant Client as "Client"
-participant ViewSet as "DocumentViewSet"
-participant Ser as "DocumentSerializer"
-participant Model as "Document"
-Client->>ViewSet : "GET /documents/"
-ViewSet->>Ser : "Serialize queryset"
-Ser-->>ViewSet : "Serialized list"
-ViewSet-->>Client : "200 OK"
-Client->>ViewSet : "POST /documents/ (multipart)"
-ViewSet->>Ser : "Validate and save(user)"
-Ser->>Model : "Create instance"
-Model-->>Ser : "Saved instance"
-Ser-->>ViewSet : "Serialized instance"
-ViewSet-->>Client : "201 Created"
-```
-
-**Diagram sources**
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [serializers.py:6-29](file://apps/files/serializers.py#L6-L29)
-- [settings.py:125-137](file://config/settings.py#L125-L137)
-
-**Section sources**
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [serializers.py:6-29](file://apps/files/serializers.py#L6-L29)
-- [settings.py:125-137](file://config/settings.py#L125-L137)
-
-### Relationship Between Users and Documents
-- Ownership: Documents belong to users via a foreign key to AUTH_USER_MODEL.
-- Authentication integration: The AUTH_USER_MODEL setting points to the users app’s User model.
-- Access control: The DocumentViewSet currently restricts access to admin users; tailor permissions for multi-user scenarios.
-
-```mermaid
-erDiagram
-USER {
-uuid id PK
-string email UK
-string name
-boolean is_active
-boolean is_staff
+class ExtractTextService {
++extract_text(file_path) str
++clean_text(text) str
 }
-DOCUMENT {
-uuid id PK
-file file
-string file_extension
-datetime uploaded_at
-datetime signed_at
-string lang
-text raw_text
-float confidence
-string title
-uuid user_id FK
+class PDFService {
++pdf_to_images(pdf_path) list
 }
-USER ||--o{ DOCUMENT : "owns"
+class OCRService {
++extract(image_path) str
+}
+DocumentService --> ExtractTextService : "uses"
+AnalysisService --> DocumentService : "uses"
+ExtractTextService --> PDFService : "uses"
+ExtractTextService --> OCRService : "uses"
 ```
 
 **Diagram sources**
-- [models.py:29-45](file://apps/users/models.py#L29-L45)
-- [models.py:7-7](file://apps/files/models.py#L7-L7)
-- [settings.py:144-144](file://config/settings.py#L144-L144)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/text_extractor_engine/services/pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+- [apps/text_extractor_engine/services/ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 
 **Section sources**
-- [models.py:7-7](file://apps/files/models.py#L7-L7)
-- [models.py:29-45](file://apps/users/models.py#L29-L45)
-- [settings.py:144-144](file://config/settings.py#L144-L144)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
 
-### Document Processing Workflows
-- Inspect workflow: Upload -> Create document -> OCR extraction -> Build DocumentInput -> Inspect via AI -> Return analysis result.
-- Insert workflow: Ensure document has raw_text -> Build DocumentInput -> Insert into knowledge graph.
+### Error Handling
+Common failure modes and handling strategies:
+- Unsupported file type: Serializer raises validation errors for non-allowed extensions.
+- Missing raw_text before insertion: AnalysisService raises an error if attempting to insert without prior inspection.
+- OCR failures: ExtractTextService relies on OCRService; consider fallbacks or retries for corrupted pages.
+- Storage limitations: Not enforced in code; implement API-level limits and monitor disk usage.
+- Integrity errors: CASCADE deletion on user ensures cleanup; ensure database constraints are respected.
 
-```mermaid
-sequenceDiagram
-participant Client as "Client"
-participant API as "AnalyzeView"
-participant AS as "AnalysisService"
-participant DS as "DocumentService"
-participant ET as "ExtractTextService"
-Client->>API : "POST /api/analyze/"
-API->>AS : "inspect_uploaded_file(user, file, title, lang)"
-AS->>DS : "create_document(user, file_data)"
-DS-->>AS : "Document"
-AS->>ET : "extract_text(document.file.path)"
-ET-->>AS : "raw_text"
-AS->>DS : "inspect_document(DocumentInput)"
-DS-->>AS : "AnalysisResult"
-AS-->>API : "AnalysisResult"
-API-->>Client : "200 OK"
-```
-
-**Diagram sources**
-- [views.py:15-42](file://apps/analysis/views.py#L15-L42)
-- [analysis_service.py:18-50](file://apps/analysis/services/analysis_service.py#L18-L50)
-- [document_services.py:22-62](file://apps/files/services/document_services.py#L22-L62)
+Recommendations:
+- Wrap OCR calls with timeouts and circuit breakers.
+- Log raw_text extraction outcomes and confidence scores for diagnostics.
+- Return structured error responses with HTTP status codes.
 
 **Section sources**
-- [analysis_service.py:18-50](file://apps/analysis/services/analysis_service.py#L18-L50)
-- [document_services.py:22-62](file://apps/files/services/document_services.py#L22-L62)
+- [apps/files/serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
+- [apps/analysis/services/analysis_service.py:71-74](file://apps/analysis/services/analysis_service.py#L71-L74)
 
 ## Dependency Analysis
-- Django ORM: Document model depends on AUTH_USER_MODEL.
-- REST Framework: Serializers and views rely on DRF for validation and rendering.
-- Media handling: MEDIA_URL and MEDIA_ROOT define storage and serving paths.
-- AI engine: DocumentService integrates with external pipelines for inspection and insertion.
-- Text extraction: ExtractTextService composes OCRService and PDFService.
+- files app depends on Django’s AUTH_USER_MODEL for ownership.
+- analysis app depends on files models and text extraction services.
+- text extractor engine provides OCR and PDF conversion utilities.
+- clauses app retrieves clause details from the knowledge graph via repositories.
 
 ```mermaid
 graph LR
-Settings["config/settings.py"] --> FilesModels["apps/files/models.py"]
-Settings --> FilesViews["apps/files/views.py"]
-Settings --> AnalysisViews["apps/analysis/views.py"]
-FilesViews --> FilesSerializers["apps/files/serializers.py"]
-FilesSerializers --> FilesModels
-FilesServices["apps/files/services/document_services.py"] --> FilesModels
-AnalysisService["apps/analysis/services/analysis_service.py"] --> FilesServices
-AnalysisService --> ExtractText["apps/text_extractor_engine/services/extract_text.py"]
-ExtractText --> OCR["apps/text_extractor_engine/services/ocr_service.py"]
-ExtractText --> PDF["apps/text_extractor_engine/services/pdf_service.py"]
-FilesModels --> UsersModels["apps/users/models.py"]
+FilesModels["files.models.Document"] --> AnalysisService["analysis.services.AnalysisService"]
+FilesSerializers["files.serializers.Document*Serializer"] --> FilesViews["files.views.DocumentViewSet"]
+FilesViews --> FilesServices["files.services.DocumentService"]
+AnalysisService --> FilesServices
+AnalysisService --> ExtractText["text_extractor_engine.services.ExtractTextService"]
+FilesServices --> ClauseRepo["ai_engine repo (via DocumentService)"]
+ClauseService["clauses.services.ClauseService"] --> ClauseRepo
 ```
 
 **Diagram sources**
-- [settings.py:122-137](file://config/settings.py#L122-L137)
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [serializers.py:6-29](file://apps/files/serializers.py#L6-L29)
-- [document_services.py:14-81](file://apps/files/services/document_services.py#L14-L81)
-- [analysis_service.py:16-50](file://apps/analysis/services/analysis_service.py#L16-L50)
-- [extract_text.py:5-27](file://apps/text_extractor_engine/services/extract_text.py#L5-L27)
-- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
-- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
-- [models.py:29-45](file://apps/users/models.py#L29-L45)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
+- [apps/files/serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
+- [apps/files/views.py:1-35](file://apps/files/views.py#L1-L35)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/clauses/services/clause_service.py:1-20](file://apps/clauses/services/clause_service.py#L1-L20)
 
 **Section sources**
-- [settings.py:122-137](file://config/settings.py#L122-L137)
-- [models.py:5-17](file://apps/files/models.py#L5-L17)
-- [document_services.py:14-81](file://apps/files/services/document_services.py#L14-L81)
-- [analysis_service.py:16-50](file://apps/analysis/services/analysis_service.py#L16-L50)
+- [apps/files/models.py:1-18](file://apps/files/models.py#L1-L18)
+- [apps/files/serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
+- [apps/files/views.py:1-35](file://apps/files/views.py#L1-L35)
+- [apps/files/services/document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [apps/analysis/services/analysis_service.py:1-90](file://apps/analysis/services/analysis_service.py#L1-L90)
+- [apps/text_extractor_engine/services/extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [apps/clauses/services/clause_service.py:1-20](file://apps/clauses/services/clause_service.py#L1-L20)
 
 ## Performance Considerations
-- OCR cost: PDFs are converted to images; consider optimizing by limiting pages or resolution.
-- Storage: Large PDFs increase I/O and OCR time; implement size limits in serializers.
-- Concurrency: Offload OCR and AI processing to background tasks for scalability.
-- Caching: Cache repeated OCR results for identical documents.
-- Pagination: Add pagination to list endpoints to avoid large payloads.
+- OCR cost: PDFs are converted to images and OCR’d page-by-page; large PDFs increase processing time.
+- Concurrency: Limit simultaneous OCR jobs; queue submissions and process serially or with bounded concurrency.
+- Memory: Large images and long texts increase memory usage; stream or chunk where possible.
+- Storage: Monitor disk usage; consider compression and retention policies.
+- Network: If using remote storage, factor in transfer latency and throughput.
+- Caching: Cache extracted text and analysis results where appropriate to avoid recomputation.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- Unsupported file type: Ensure the file extension matches allowed types in the serializer.
-- Missing file in multipart payload: Verify the field name and content type.
-- OCR failure: Confirm OCR dependencies are installed and accessible; handle exceptions and return structured error responses.
-- Missing raw_text before insertion: The insert workflow requires prior inspection to populate raw_text.
+- Corrupted or unreadable files:
+  - Verify file integrity before upload.
+  - Check OCRService confidence thresholds; consider manual review for low-confidence outputs.
+- Processing failures:
+  - Inspect logs around ExtractTextService.extract_text and OCRService.extract.
+  - Validate that pdf2image and easyocr are installed and configured.
+- Storage limitations:
+  - Confirm MEDIA_ROOT and storage backend configuration.
+  - Implement API-level size checks and enforce quotas.
+- Concurrent uploads:
+  - Use throttling and job queues to avoid resource contention.
+- Missing raw_text:
+  - Ensure AnalysisService.inspect_uploaded_file completes text extraction before calling insert.
 
 **Section sources**
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [views.py:33-38](file://apps/analysis/views.py#L33-L38)
-- [analysis_service.py:62-65](file://apps/analysis/services/analysis_service.py#L62-L65)
+- [apps/analysis/services/analysis_service.py:71-74](file://apps/analysis/services/analysis_service.py#L71-L74)
+- [apps/text_extractor_engine/services/ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [apps/text_extractor_engine/services/pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
 
 ## Conclusion
-VeritasShield’s document management system provides a robust foundation for uploading, validating, extracting text, and analyzing legal contracts. The Document model captures essential metadata and processing state, while services orchestrate OCR and AI pipelines. Current limitations include admin-only access and lack of explicit filtering/pagination; extending these capabilities will improve usability and scalability.
+Veritas Shield’s document management system provides a robust foundation for uploading, extracting text, and analyzing legal and contractual documents. The Document model encapsulates essential metadata, while serializers and views enforce validation and expose CRUD endpoints. The processing pipeline integrates OCR and AI analysis, enabling clause extraction and similarity/conflict detection. By applying the recommended validations, storage configurations, and performance strategies, teams can scale document handling safely and efficiently.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
-### API Endpoints
-- GET /documents/: List all documents (admin-only).
-- POST /documents/: Create a new document (admin-only).
-- GET /documents/{id}/: Retrieve a document (admin-only).
-- PUT /documents/{id}/: Update a document (admin-only).
-- DELETE /documents/{id}/: Delete a document (admin-only).
-- POST /api/analyze/: Upload and analyze a document (authenticated).
+### API Definitions
+- Upload document:
+  - Method: POST
+  - Path: /files/documents/
+  - Body: multipart/form-data with fields file, title, lang, file_extension
+  - Permissions: Depends on view configuration
+
+- Retrieve document:
+  - Method: GET
+  - Path: /files/documents/{id}/
+
+- Update document:
+  - Method: PUT
+  - Path: /files/documents/{id}/
+
+- Delete document:
+  - Method: DELETE
+  - Path: /files/documents/{id}/
+
+- Get clauses:
+  - Method: GET
+  - Path: /files/documents/{doc_id}/clauses/
+
+- Analyze document:
+  - Method: POST
+  - Path: /analysis/analyze/
+
+- Insert analyzed document:
+  - Method: POST
+  - Path: /analysis/analyze/save/
 
 **Section sources**
-- [urls.py:6-23](file://apps/files/urls.py#L6-L23)
-- [views.py:8-11](file://apps/files/views.py#L8-L11)
-- [views.py:15-42](file://apps/analysis/views.py#L15-L42)
+- [apps/files/urls.py:6-28](file://apps/files/urls.py#L6-L28)
+- [apps/analysis/urls.py:5-8](file://apps/analysis/urls.py#L5-L8)

@@ -4,369 +4,252 @@
 **Referenced Files in This Document**
 - [settings.py](file://config/settings.py)
 - [urls.py](file://config/urls.py)
+- [manage.py](file://manage.py)
 - [wsgi.py](file://config/wsgi.py)
 - [asgi.py](file://config/asgi.py)
-- [manage.py](file://manage.py)
-- [users/models.py](file://apps/users/models.py)
-- [authentication/views.py](file://apps/authentication/views.py)
-- [files/views.py](file://apps/files/views.py)
-- [files/models.py](file://apps/files/models.py)
-- [text_extractor_engine/services/pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
-- [text_extractor_engine/services/ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
-- [text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
+- [neo4j_docker_compose.yaml](file://docker_files/neo4j_docker_compose.yaml)
+- [postgresql_docker_compose.yaml](file://docker_files/postgresql_docker_compose.yaml)
+- [document_services.py](file://apps/files/services/document_services.py)
+- [models.py](file://apps/users/models.py)
+- [0001_initial.py](file://apps/files/migrations/0001_initial.py)
+- [0002_initial.py](file://apps/files/migrations/0002_initial.py)
 </cite>
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Project Structure](#project-structure)
-3. [Core Components](#core-components)
-4. [Architecture Overview](#architecture-overview)
-5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+2. [Prerequisites](#prerequisites)
+3. [Installation](#installation)
+4. [Environment Setup](#environment-setup)
+5. [Database Configuration](#database-configuration)
+6. [Initial Project Setup](#initial-project-setup)
+7. [Running the Local Development Server](#running-the-local-development-server)
+8. [Accessing API Endpoints](#accessing-api-endpoints)
+9. [Platform-Specific Considerations](#platform-specific-considerations)
+10. [Verification Steps](#verification-steps)
+11. [Troubleshooting](#troubleshooting)
+12. [Next Steps](#next-steps)
 
 ## Introduction
-This guide helps you install, configure, and run the VeritasShield backend locally. It covers prerequisites, environment setup, database configuration, initial migrations, environment variables, quick start workflows, and verification steps. The backend is a Django application with Django REST Framework and SimpleJWT for authentication, storing user and document metadata in PostgreSQL.
+This guide helps you set up the Veritas Shield backend locally for development. It covers prerequisites, environment preparation, database configuration, project initialization, running the development server, and verifying your installation. It also includes troubleshooting tips and next steps for ongoing development.
 
-## Project Structure
-VeritasShield follows a Django project layout with modular apps:
-- apps/authentication: user registration, login, logout, and JWT token handling
-- apps/users: custom user model and related logic
-- apps/files: document storage and metadata
-- apps/analysis: analysis orchestration and services
-- apps/text_extractor_engine: text extraction pipeline (OCR, PDF parsing)
-- config: Django settings, URLs, WSGI/ASGI applications
-- manage.py: Django CLI entrypoint
+## Prerequisites
+Ensure the following before proceeding:
+- Python 3.8 or newer
+- PostgreSQL database
+- Neo4j graph database
+- Docker (for containerized databases)
+- Git (recommended for version control)
 
-```mermaid
-graph TB
-subgraph "Config"
-CFG["config/settings.py"]
-URL["config/urls.py"]
-WSGI["config/wsgi.py"]
-ASGI["config/asgi.py"]
-end
-subgraph "Apps"
-AUTH["apps/authentication"]
-USERS["apps/users"]
-FILES["apps/files"]
-ANALYSIS["apps/analysis"]
-TEXTRACT["apps/text_extractor_engine"]
-end
-CFG --> AUTH
-CFG --> USERS
-CFG --> FILES
-CFG --> ANALYSIS
-CFG --> TEXTRACT
-URL --> AUTH
-URL --> USERS
-URL --> FILES
-URL --> ANALYSIS
-URL --> TEXTRACT
-WSGI --> CFG
-ASGI --> CFG
-```
+Notes:
+- The backend uses Django and Django REST Framework.
+- JWT-based authentication is configured.
+- PostgreSQL is configured as the default Django database engine.
+- Neo4j is referenced in service code for AI-related pipelines.
 
-**Diagram sources**
-- [settings.py](file://config/settings.py)
+**Section sources**
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [settings.py:125-137](file://config/settings.py#L125-L137)
+- [document_services.py:4-7](file://apps/files/services/document_services.py#L4-L7)
+
+## Installation
+Follow these steps to install and prepare the backend:
+
+1. Clone the repository (if not already cloned).
+2. Create a virtual environment:
+   - On Unix-like systems: python3 -m venv venv && source venv/bin/activate
+   - On Windows: py -m venv venv && venv\Scripts\activate
+3. Install Python dependencies:
+   - pip install django djangorestframework djangorestframework-simplejwt psycopg2-binary python-dotenv
+   - If using Docker for databases, install docker-compose or Docker Desktop.
+
+**Section sources**
+- [manage.py:10-18](file://manage.py#L10-L18)
+
+## Environment Setup
+Set up environment variables and configuration files:
+
+1. Configure Django settings:
+   - The settings module is loaded via the manage script and WSGI/ASGI entry points.
+   - Default DEBUG is enabled for development.
+   - Allowed hosts include localhost and 127.0.0.1.
+
+2. Configure REST Framework and JWT:
+   - JWT authentication is enabled with JSON renderer and parser classes.
+   - Access tokens expire after 60 minutes; refresh tokens after 7 days.
+   - Authentication uses email as the username field.
+
+3. Media and static assets:
+   - MEDIA_URL and MEDIA_ROOT are configured for uploaded files.
+
+4. Optional environment variables:
+   - You can override defaults using environment variables (e.g., SECRET_KEY, DATABASES).
+   - Place sensitive keys in a .env file and load them before running the server.
+
+**Section sources**
+- [settings.py:19](file://config/settings.py#L19)
+- [settings.py:150](file://config/settings.py#L150)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
+- [settings.py:121-123](file://config/settings.py#L121-L123)
+- [wsgi.py:14](file://config/wsgi.py#L14)
+- [asgi.py:14](file://config/asgi.py#L14)
+
+## Database Configuration
+The project supports two deployment modes: local databases and Docker containers.
+
+### Option A: Local Databases
+1. PostgreSQL:
+   - Ensure PostgreSQL is installed and running.
+   - Create a database named veritassheild and a user hamza_admin with password hamza.
+   - Confirm host=localhost and port=5432 match your local setup.
+
+2. Neo4j:
+   - Install Neo4j and start the service.
+   - Use the default bolt port 7687 and browser port 7474.
+   - Set credentials as neo4j/Ham@za515047.
+
+3. Django database settings:
+   - The default DATABASES setting points to PostgreSQL with the above credentials.
+
+**Section sources**
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [neo4j_docker_compose.yaml:11-13](file://docker_files/neo4j_docker_compose.yaml#L11-L13)
+- [postgresql_docker_compose.yaml:10-14](file://docker_files/postgresql_docker_compose.yaml#L10-L14)
+
+### Option B: Docker Containers
+1. PostgreSQL container:
+   - Use the provided compose file to run a Bitnami PostgreSQL image.
+   - Exposes port 5432 and persists data to volumes.
+   - Sets credentials and optional performance/logging parameters.
+
+2. Neo4j container:
+   - Use the provided compose file to run Neo4j 5.x.
+   - Exposes ports 7474 (browser) and 7687 (bolt).
+   - Persists data/logs/import/plugins to volumes.
+
+3. Start containers:
+   - docker-compose -f docker_files/postgresql_docker_compose.yaml up -d
+   - docker-compose -f docker_files/neo4j_docker_compose.yaml up -d
+
+4. Verify connectivity:
+   - Confirm PostgreSQL responds on localhost:5432.
+   - Confirm Neo4j browser on http://localhost:7474 and bolt on localhost:7687.
+
+**Section sources**
+- [postgresql_docker_compose.yaml:1-56](file://docker_files/postgresql_docker_compose.yaml#L1-L56)
+- [neo4j_docker_compose.yaml:1-25](file://docker_files/neo4j_docker_compose.yaml#L1-L25)
+
+## Initial Project Setup
+Complete these steps to initialize the project:
+
+1. Apply database migrations:
+   - Run python manage.py migrate to create tables for apps and users.
+
+2. Create a superuser:
+   - Run python manage.py createsuperuser to set up admin credentials.
+
+3. Load initial data (optional):
+   - Some apps include initial migrations for documents and relationships.
+
+4. Verify models and relationships:
+   - The Document model stores uploaded files and metadata.
+   - The User model extends AbstractBaseUser with email as the unique identifier.
+
+**Section sources**
+- [0001_initial.py:14-27](file://apps/files/migrations/0001_initial.py#L14-L27)
+- [0002_initial.py:18-23](file://apps/files/migrations/0002_initial.py#L18-L23)
+- [models.py:29-46](file://apps/users/models.py#L29-L46)
+
+## Running the Local Development Server
+Start the development server:
+
+- From the project root, run python manage.py runserver.
+- The server listens on localhost by default; adjust ALLOWED_HOSTS in settings if needed.
+
+Access the admin interface:
+- Navigate to http://127.0.0.1:8000/admin using your superuser credentials.
+
+**Section sources**
+- [settings.py:150](file://config/settings.py#L150)
+- [manage.py:18](file://manage.py#L18)
+
+## Accessing API Endpoints
+- The project defines URL routing in config/urls.py. Add your app URLs there to expose endpoints.
+- JWT authentication is enabled; clients should include Authorization: Bearer <token> in requests.
+- Default renderers return JSON responses.
+
+Notes:
+- Ensure your client sets Content-Type appropriately for JSON or multipart/form-data when uploading files.
+
+**Section sources**
 - [urls.py](file://config/urls.py)
-- [wsgi.py](file://config/wsgi.py)
-- [asgi.py](file://config/asgi.py)
+- [settings.py:129-137](file://config/settings.py#L129-L137)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
+
+## Platform-Specific Considerations
+Windows:
+- Use Command Prompt or PowerShell; avoid Git Bash for Python commands.
+- Ensure Python and pip are added to PATH.
+- For Docker, use Docker Desktop or WSL2 backend.
+
+Unix-like (Linux/macOS):
+- Use your shell’s activation script for the virtual environment.
+- Install system packages for PostgreSQL development headers if needed (e.g., libpq-dev).
+- For Docker, ensure docker-compose is installed and the daemon is running.
+
+## Verification Steps
+Confirm a successful setup by checking:
+
+- Database connectivity:
+  - PostgreSQL: connect to veritassheild with user hamza_admin.
+  - Neo4j: access http://localhost:7474 and verify bolt://localhost:7687.
+
+- Django migrations:
+  - Run python manage.py showmigrations to list applied/unapplied migrations.
+
+- Server startup:
+  - The development server starts without errors on http://127.0.0.1:8000.
+
+- Admin access:
+  - Log in to the admin panel using the superuser account.
 
 **Section sources**
-- [settings.py](file://config/settings.py)
-- [urls.py](file://config/urls.py)
-- [wsgi.py](file://config/wsgi.py)
-- [asgi.py](file://config/asgi.py)
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [neo4j_docker_compose.yaml:8-10](file://docker_files/neo4j_docker_compose.yaml#L8-L10)
+- [postgresql_docker_compose.yaml:39-40](file://docker_files/postgresql_docker_compose.yaml#L39-L40)
+- [manage.py:18](file://manage.py#L18)
 
-## Core Components
-- Authentication and Users
-  - Custom user model with email-based login
-  - JWT-based authentication with SimpleJWT
-  - Registration, login, and logout endpoints
-- Files and Documents
-  - Document model with file upload, metadata, and OCR-related fields
-  - Admin-only document management
-- Text Extraction Engine
-  - Services for PDF processing and OCR
-- Analysis
-  - Analysis service orchestrating document processing and insights
-
-**Section sources**
-- [users/models.py](file://apps/users/models.py)
-- [authentication/views.py](file://apps/authentication/views.py)
-- [files/models.py](file://apps/files/models.py)
-- [files/views.py](file://apps/files/views.py)
-- [text_extractor_engine/services/pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
-- [text_extractor_engine/services/ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
-- [text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
-
-## Architecture Overview
-High-level runtime flow:
-- Django WSGI/ASGI application loads settings and routes requests
-- Authentication app handles registration/login/logout
-- Files app manages document uploads and metadata
-- Text extraction engine processes documents
-- Analysis app orchestrates analysis and returns results
-
-```mermaid
-graph TB
-Client["Client"]
-DJ["Django App<br/>WSGI/ASGI"]
-AUTH["Authentication Views"]
-USERS["User Model"]
-FILES["Files Views & Models"]
-TEXTRACT["Text Extraction Services"]
-ANALYSIS["Analysis Services"]
-Client --> DJ
-DJ --> AUTH
-AUTH --> USERS
-DJ --> FILES
-FILES --> TEXTRACT
-FILES --> ANALYSIS
-ANALYSIS --> TEXTRACT
-```
-
-**Diagram sources**
-- [wsgi.py](file://config/wsgi.py)
-- [asgi.py](file://config/asgi.py)
-- [authentication/views.py](file://apps/authentication/views.py)
-- [users/models.py](file://apps/users/models.py)
-- [files/views.py](file://apps/files/views.py)
-- [files/models.py](file://apps/files/models.py)
-- [text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
-
-## Detailed Component Analysis
-
-### Prerequisites
-- Python
-  - Version 3.8 or newer is required by the project configuration
-- PostgreSQL
-  - Used as the default database for Django ORM
-  - Credentials and connection parameters are configured in settings
-- Neo4j Graph Database
-  - The project imports a Neo4j driver and references a graph database in settings; ensure Neo4j is installed and accessible
-- System Requirements
-  - OS: Windows/Linux/macOS
-  - Disk: Sufficient space for media uploads and database storage
-  - Memory: Minimum recommended for local development with PostgreSQL and Neo4j
-
-**Section sources**
-- [settings.py](file://config/settings.py)
-
-### Installation Steps
-- Create a virtual environment
-  - Use your preferred method to create a venv at the project root
-- Activate the virtual environment
-  - On Windows: .venv\Scripts\activate
-- Install dependencies
-  - Run pip install with the project’s requirements.txt or pyproject.toml if present
-- Configure environment variables
-  - Set DJANGO_SETTINGS_MODULE to config.settings
-  - Configure database credentials and Neo4j connection details as per settings
-- Apply migrations
-  - Run the Django migration command to create tables
-- Collect static assets (optional)
-  - Run the collectstatic command if needed for deployment-like testing
-- Start the development server
-  - Use the Django management command to run the server
-
-Verification
-- Confirm the server starts without errors
-- Verify database connectivity by accessing admin or running a simple query
-- Test authentication endpoints
-
-**Section sources**
-- [manage.py](file://manage.py)
-- [settings.py](file://config/settings.py)
-
-### Environment Variables
-Key variables to configure:
-- DJANGO_SETTINGS_MODULE: set to config.settings
-- Database
-  - DATABASES.default.NAME, USER, PASSWORD, HOST, PORT
-- JWT
-  - REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES and SIMPLE_JWT settings
-- OAuth2
-  - GOOGLE_OAUTH2_CLIENT_ID and related social account settings
-- Media
-  - MEDIA_ROOT and MEDIA_URL for file uploads
-
-Note: The project currently defines default database credentials in settings. For production, override these via environment variables or a separate settings file.
-
-**Section sources**
-- [settings.py](file://config/settings.py)
-
-### Quick Start Examples
-
-#### User Registration
-- Endpoint: POST to the registration endpoint
-- Request body: email, password
-- Expected response: access and refresh tokens on successful creation
-
-```mermaid
-sequenceDiagram
-participant C as "Client"
-participant V as "RegisterView"
-participant U as "User Model"
-C->>V : "POST /register {email, password}"
-V->>U : "create_user(email, password)"
-U-->>V : "User created"
-V-->>C : "{access, refresh} 201"
-```
-
-**Diagram sources**
-- [authentication/views.py](file://apps/authentication/views.py)
-- [users/models.py](file://apps/users/models.py)
-
-**Section sources**
-- [authentication/views.py](file://apps/authentication/views.py)
-- [users/models.py](file://apps/users/models.py)
-
-#### Login Workflow
-- Endpoint: POST to the login endpoint
-- Request body: email, password
-- Expected response: JWT pair (access and refresh)
-
-```mermaid
-sequenceDiagram
-participant C as "Client"
-participant V as "CustomLoginView"
-participant U as "User Model"
-C->>V : "POST /login {email, password}"
-V->>U : "authenticate(email, password)"
-U-->>V : "User authenticated"
-V-->>C : "{access, refresh} 200"
-```
-
-**Diagram sources**
-- [authentication/views.py](file://apps/authentication/views.py)
-- [users/models.py](file://apps/users/models.py)
-
-**Section sources**
-- [authentication/views.py](file://apps/authentication/views.py)
-- [users/models.py](file://apps/users/models.py)
-
-#### Document Upload Process
-- Endpoint: Upload a file via the files app
-- Request: multipart/form-data with the file field
-- Behavior: File saved to media directory; metadata stored in the Document model
-
-```mermaid
-sequenceDiagram
-participant C as "Client"
-participant F as "DocumentViewSet"
-participant D as "Document Model"
-C->>F : "POST /files {file}"
-F->>D : "create Document(file, user, metadata)"
-D-->>F : "Saved"
-F-->>C : "201 Created"
-```
-
-**Diagram sources**
-- [files/views.py](file://apps/files/views.py)
-- [files/models.py](file://apps/files/models.py)
-
-**Section sources**
-- [files/views.py](file://apps/files/views.py)
-- [files/models.py](file://apps/files/models.py)
-
-#### Basic Analysis Request
-- Endpoint: Trigger analysis on a document
-- Flow: The files app stores the document; the analysis service orchestrates text extraction and analysis
-
-```mermaid
-flowchart TD
-Start(["Upload Document"]) --> Store["Store in Document model"]
-Store --> Extract["Extract Text (PDF/OCR)"]
-Extract --> Analyze["Run Analysis"]
-Analyze --> Result["Return Results"]
-```
-
-**Diagram sources**
-- [files/models.py](file://apps/files/models.py)
-- [text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
-
-**Section sources**
-- [files/models.py](file://apps/files/models.py)
-- [text_extractor_engine/services/extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
-- [analysis/services/analysis_service.py](file://apps/analysis/services/analysis_service.py)
-
-## Dependency Analysis
-- Django and Django REST Framework
-  - Settings enable JWT authentication and define parsers/renderers
-- PostgreSQL
-  - Default ENGINE configured; ensure the database exists and credentials are correct
-- Neo4j
-  - Driver imported and settings reference a graph database; ensure connectivity
-
-```mermaid
-graph LR
-Settings["config/settings.py"]
-Django["Django"]
-DRF["DRF + SimpleJWT"]
-PG["PostgreSQL"]
-NG["Neo4j"]
-Settings --> Django
-Settings --> DRF
-Settings --> PG
-Settings --> NG
-```
-
-**Diagram sources**
-- [settings.py](file://config/settings.py)
-
-**Section sources**
-- [settings.py](file://config/settings.py)
-
-## Performance Considerations
-- Keep DEBUG disabled in production
-- Use a production-ready WSGI server and reverse proxy
-- Optimize database queries and consider indexing for frequently accessed fields
-- Offload heavy OCR and analysis workloads to background tasks if scaling
-
-## Troubleshooting Guide
+## Troubleshooting
 Common issues and resolutions:
-- Django import error during startup
-  - Cause: Missing Django or incorrect Python path
-  - Fix: Activate the virtual environment and reinstall dependencies
-- Database connection failure
-  - Symptoms: OperationalError on startup
-  - Fix: Verify DATABASES settings, PostgreSQL service status, and network accessibility
-- Authentication failures
-  - Symptoms: 401/403 responses or token errors
-  - Fix: Confirm JWT settings, SECRET_KEY, and client-side token handling
-- OAuth2 configuration
-  - Symptoms: Social login errors
-  - Fix: Validate GOOGLE_OAUTH2_CLIENT_ID and related social settings
-- File upload issues
-  - Symptoms: 400 errors or missing files
-  - Fix: Ensure multipart/form-data encoding and MEDIA settings are correct
+
+- Django import error:
+  - Symptom: “Couldn’t import Django” during manage.py execution.
+  - Fix: Activate your virtual environment and reinstall Django.
+
+- Database connection failures:
+  - PostgreSQL: verify host/port/credentials match settings.py and local/remote configuration.
+  - Neo4j: ensure the container is running and ports are not blocked.
+
+- Permission denied for PostgreSQL volume (Docker):
+  - Bitnami images require proper volume ownership; ensure the mounted directory exists and is writable.
+
+- CORS or host-related errors:
+  - Add your domain/IP to ALLOWED_HOSTS in settings.py.
+
+- JWT authentication issues:
+  - Ensure clients send Authorization: Bearer <token>.
+  - Check SIMPLE_JWT token lifetimes and header types.
 
 **Section sources**
-- [manage.py](file://manage.py)
-- [settings.py](file://config/settings.py)
-- [authentication/views.py](file://apps/authentication/views.py)
-- [files/views.py](file://apps/files/views.py)
+- [manage.py:12-17](file://manage.py#L12-L17)
+- [settings.py:75-84](file://config/settings.py#L75-L84)
+- [settings.py:150](file://config/settings.py#L150)
+- [settings.py:125-143](file://config/settings.py#L125-L143)
+- [postgresql_docker_compose.yaml:8](file://docker_files/postgresql_docker_compose.yaml#L8)
 
-## Conclusion
-You now have the essentials to install, configure, and run VeritasShield locally. Proceed with applying migrations, configuring environment variables, and testing the endpoints documented above. For production, harden secrets, disable DEBUG, and deploy behind a proper web server and reverse proxy.
-
-## Appendices
-
-### Verification Checklist
-- Server runs without startup errors
-- Migrations applied successfully
-- Database tables created and accessible
-- Authentication endpoints return tokens
-- Document upload succeeds and files appear under media
-- Analysis endpoints return expected results
-
-[No sources needed since this section provides general guidance]
+## Next Steps
+- Define app-specific URLs in config/urls.py to expose API endpoints.
+- Implement views and serializers for each app (authentication, analysis, clauses, files, text extractor engine, users).
+- Integrate Neo4j pipelines in document services for clause classification and extraction.
+- Add environment-specific settings and secrets management (e.g., .env loading).
+- Set up automated testing and CI/CD pipelines.
+- Deploy to a staging environment using the same settings and Docker configurations.

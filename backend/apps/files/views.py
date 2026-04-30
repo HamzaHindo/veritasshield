@@ -9,9 +9,11 @@ from .services.document_services import DocumentService
 
 
 class DocumentViewSet(ModelViewSet):
-    permission_classes = [permissions.IsAdminUser]
-    queryset = Document.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = DocumentSerializer
+
+    def get_queryset(self):
+        return Document.objects.filter(user=self.request.user)
 
 
 class DocumentClausesView(APIView):
