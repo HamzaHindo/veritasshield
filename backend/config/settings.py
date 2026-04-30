@@ -3,10 +3,8 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-PROJECT_ROOT = BASE_DIR.parent
-sys.path.append(str(PROJECT_ROOT))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(BASE_DIR, "..", "ai_logic"))
 
 
 # Quick-start development settings - unsuitable for production
