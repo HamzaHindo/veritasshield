@@ -1,11 +1,26 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-sentence-transformers
-neo4j
-numpy
-uuid
-datetime
-typing
-dataclasses
-python-dotenv
-scikit-learn
+# VeritasShield - Python Dependencies
+# -------------------------------------------------
+# Install with:  pip install -r requirements.txt
+
+# --- Web Framework & API ---
+Django>=5.0,<6.0
+djangorestframework>=3.14.0
+djangorestframework-simplejwt>=5.3.0
+
+# --- Databases ---
+psycopg2-binary>=2.9.9          # PostgreSQL adapter (django.db.backends.postgresql)
+neo4j>=5.15.0                   # Neo4j graph database driver
+
+# --- ML / NLP / Embeddings ---
+sentence-transformers>=2.2.0    # all-MiniLM-L6-v2 embedding model
+scikit-learn>=1.3.0             # cosine_similarity in similarity_engine
+numpy>=1.24.0                   # array operations
+
+# --- OCR & Document Processing ---
+easyocr>=1.7.0                  # OCR text extraction
+pdf2image>=1.16.0               # PDF to image conversion
+Pillow>=10.0.0                  # Image handling (required by pdf2image & Django)
+
+# --- Utilities ---
+python-dotenv>=1.0.0            # Environment variable management
+requests>=2.27.1
