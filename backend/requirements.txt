@@ -4,7 +4,7 @@
 #
 # NOTE: PyTorch is pulled from the CUDA 12.6 wheel index.
 #       The --extra-index-url directive below ensures pip still
-#       falls back to PyPI for all other packages.
+#       falls back to PyPI for all other packages
 
 --extra-index-url https://download.pytorch.org/whl/cu126
 
