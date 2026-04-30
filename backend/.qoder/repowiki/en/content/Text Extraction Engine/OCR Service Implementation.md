@@ -6,9 +6,11 @@
 - [extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
 - [pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
 - [analysis_service.py](file://apps/analysis/services/analysis_service.py)
-- [views.py](file://backupApps/api/views.py)
+- [views.py](file://apps/analysis/views.py)
 - [models.py](file://apps/files/models.py)
+- [serializers.py](file://apps/files/serializers.py)
 - [settings.py](file://config/settings.py)
+- [openapi.yaml](file://openapi.yaml)
 </cite>
 
 ## Table of Contents
@@ -21,333 +23,317 @@
 7. [Performance Considerations](#performance-considerations)
 8. [Troubleshooting Guide](#troubleshooting-guide)
 9. [Conclusion](#conclusion)
+10. [Appendices](#appendices)
 
 ## Introduction
-This document explains the OCR service implementation in VeritasShield, focusing on EasyOCR integration for extracting text from scanned documents and images. It covers the OCR service architecture, initialization parameters, language support, preprocessing techniques, and optimization strategies. It also documents configuration options, performance tuning parameters, and fallback strategies for low-quality scans, along with guidance for handling different image formats, resolutions, and multi-language scenarios.
+This document explains the OCR service implementation using EasyOCR within the application. It covers the OCRService class architecture, text extraction methodology, confidence scoring mechanisms, Reader initialization with English language support, the text processing pipeline, and result formatting. Practical examples demonstrate processing different image types, handling various text orientations, and optimizing OCR accuracy. Configuration options for OCR parameters, language support expansion, and performance tuning strategies are documented alongside common issues such as poor image quality, text skewing, and mixed font types with their solutions.
 
 ## Project Structure
-The OCR functionality resides in the text extractor engine application and integrates with the files application and analysis pipeline. The key modules are:
-- OCR service: EasyOCR wrapper for text extraction
-- PDF service: Converts PDF pages to images
-- Extract text service: Orchestrates OCR for images and PDFs
-- Analysis service: Coordinates document creation and OCR processing
-- Views: Legacy API endpoints for OCR processing
-- Models: Document storage with OCR metadata
+The OCR functionality resides in the text extractor engine module and integrates with the analysis pipeline and file/document models. The primary components are:
+- OCRService: Performs text extraction using EasyOCR.
+- ExtractTextService: Orchestrates OCR and PDF conversion, and cleans extracted text.
+- PDFService: Converts PDFs to images for OCR processing.
+- AnalysisService: Coordinates document creation, OCR extraction, and downstream analysis.
+- Views and Serializers: Expose the OCR-enabled analysis API and manage document persistence.
 
 ```mermaid
 graph TB
-subgraph "Text Extractor Engine"
-OCR["OCRService<br/>EasyOCR wrapper"]
-PDF["PDFService<br/>PDF to images"]
-Extract["ExtractTextService<br/>orchestrator"]
+subgraph "API Layer"
+AV["AnalyzeView"]
 end
-subgraph "Files App"
-DocModel["Document model<br/>storage + metadata"]
+subgraph "Analysis Layer"
+AS["AnalysisService"]
 end
-subgraph "Analysis App"
-Analysis["AnalysisService<br/>integration"]
+subgraph "Text Extraction Engine"
+ETS["ExtractTextService"]
+OCR["OCRService"]
+PDF["PDFService"]
 end
-subgraph "Backup API"
-View["ContractUploadView<br/>legacy OCR endpoint"]
+subgraph "Persistence"
+DM["Document Model"]
+DS["Document Serializers"]
 end
-Analysis --> Extract
-Extract --> OCR
-Extract --> PDF
-Analysis --> DocModel
-View --> OCR
-View --> PDF
+AV --> AS
+AS --> ETS
+ETS --> PDF
+ETS --> OCR
+AS --> DM
+AS --> DS
 ```
 
 **Diagram sources**
-- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
-- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
-- [analysis_service.py:1-43](file://apps/analysis/services/analysis_service.py#L1-L43)
-- [views.py:1-93](file://backupApps/api/views.py#L1-L93)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
+- [views.py:15-56](file://apps/analysis/views.py#L15-L56)
+- [analysis_service.py:18-59](file://apps/analysis/services/analysis_service.py#L18-L59)
+- [extract_text.py:5-54](file://apps/text_extractor_engine/services/extract_text.py#L5-L54)
+- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
+- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [models.py:5-17](file://apps/files/models.py#L5-L17)
+- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
 
 **Section sources**
-- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
-- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-- [analysis_service.py:1-43](file://apps/analysis/services/analysis_service.py#L1-L43)
-- [views.py:1-93](file://backupApps/api/views.py#L1-L93)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
+- [openapi.yaml:572-621](file://openapi.yaml#L572-L621)
 
 ## Core Components
-- OCRService: Initializes EasyOCR with a language list and extracts text from images. It returns concatenated text lines and computes average confidence from OCR results.
-- PDFService: Converts a PDF into page images using pdf2image and saves them as JPEG files for OCR processing.
-- ExtractTextService: Determines whether the input is a PDF or an image and routes processing accordingly. For PDFs, it converts pages to images and applies OCR to each page, concatenating results.
-- AnalysisService: Integrates OCR into the document analysis workflow by creating a document, extracting raw text via OCR, and updating the document with OCR results.
-- Document model: Stores file metadata, language preference, extracted text, confidence score, and related fields.
-
-Key characteristics:
-- Language support is configured during OCR initialization.
-- Confidence scores are computed from EasyOCR results.
-- PDFs are processed page-by-page to improve accuracy and manage memory.
+- OCRService: Initializes EasyOCR Reader with English language support and extracts text from image paths. It computes an average confidence score across detected text lines.
+- ExtractTextService: Provides a unified interface to extract text from both images and PDFs. It converts PDFs to images and iterates through pages, applying OCR to each page. It also normalizes whitespace and removes escape sequences from extracted text.
+- PDFService: Uses pdf2image to convert a PDF into a list of image paths for OCR processing.
+- AnalysisService: Manages the end-to-end workflow for document analysis, including document creation, OCR extraction, and invoking downstream inspection logic.
+- Document Model and Serializers: Persist document metadata, language, extracted text, and confidence scores, and enforce field visibility and validation.
 
 **Section sources**
 - [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
 - [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
-- [analysis_service.py:1-43](file://apps/analysis/services/analysis_service.py#L1-L43)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
+- [analysis_service.py:18-59](file://apps/analysis/services/analysis_service.py#L18-L59)
+- [models.py:5-17](file://apps/files/models.py#L5-L17)
+- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
 
 ## Architecture Overview
-The OCR pipeline follows a layered design:
-- Input: Image or PDF file path
-- PDF conversion: Convert PDF pages to images
-- OCR extraction: Apply EasyOCR to each image
-- Aggregation: Concatenate text from all pages/images
-- Persistence: Store extracted text and confidence in the Document model
+The OCR pipeline begins at the AnalyzeView, which validates multipart/form-data requests and delegates to AnalysisService. AnalysisService creates a Document instance, triggers ExtractTextService to extract text from the uploaded file (handling PDFs by converting to images), and persists the extracted text. The system supports English language OCR by default and exposes an optional language parameter for future expansion.
 
 ```mermaid
 sequenceDiagram
 participant Client as "Client"
-participant Analysis as "AnalysisService"
+participant View as "AnalyzeView"
+participant Service as "AnalysisService"
 participant Extract as "ExtractTextService"
 participant PDF as "PDFService"
 participant OCR as "OCRService"
-participant DB as "Document model"
-Client->>Analysis : "inspect_uploaded_file(user, file_obj, title, lang)"
-Analysis->>DB : "create Document"
-Analysis->>Extract : "extract_text(document.file.path)"
+participant Model as "Document Model"
+Client->>View : "POST /api/analyze/ (multipart/form-data)"
+View->>Service : "inspect_uploaded_file(user, file_obj, title, language)"
+Service->>Model : "create_document(file, file_extension, title, lang)"
+Service->>Extract : "extract_text(document.file.path)"
 alt "File is PDF"
 Extract->>PDF : "pdf_to_images(pdf_path)"
 PDF-->>Extract : "image_paths"
-loop "for each image_path"
+loop "For each image"
 Extract->>OCR : "extract(image_path)"
 OCR-->>Extract : "text"
 end
-else "File is image"
+else "Image file"
 Extract->>OCR : "extract(image_path)"
 OCR-->>Extract : "text"
 end
-Extract-->>Analysis : "full_text"
-Analysis->>DB : "update raw_text and save"
+Extract-->>Service : "cleaned_text"
+Service->>Model : "update raw_text"
+Service-->>View : "AnalysisResult"
+View-->>Client : "AnalysisResult JSON"
 ```
 
 **Diagram sources**
-- [analysis_service.py:16-43](file://apps/analysis/services/analysis_service.py#L16-L43)
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
+- [views.py:22-56](file://apps/analysis/views.py#L22-L56)
+- [analysis_service.py:21-59](file://apps/analysis/services/analysis_service.py#L21-L59)
+- [extract_text.py:36-54](file://apps/text_extractor_engine/services/extract_text.py#L36-L54)
 - [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
 - [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
-- [models.py:5-14](file://apps/files/models.py#L5-L14)
+- [models.py:11-13](file://apps/files/models.py#L11-L13)
 
 ## Detailed Component Analysis
 
-### OCRService
-Responsibilities:
-- Initialize EasyOCR reader with a language list
-- Extract text from a single image
-- Compute average confidence across detected text lines
-
-Implementation highlights:
-- Uses EasyOCR’s readtext to obtain bounding boxes, text, and confidence scores
-- Aggregates text lines into a single string separated by newlines
-- Calculates average confidence from per-line confidence values
+### OCRService Analysis
+OCRService encapsulates EasyOCR integration:
+- Reader Initialization: A single EasyOCR Reader is initialized with English language support at module level for efficiency.
+- Text Extraction: The extract method reads text from an image path and returns concatenated text lines separated by newlines.
+- Confidence Scoring: Computes the average confidence across detected text lines. If no text is detected, confidence remains zero.
 
 ```mermaid
 classDiagram
 class OCRService {
-+extract(image_path) str
++extract(image_path : str) str
+-reader Reader
 }
-class EasyOCRReader {
-+readtext(image_path) list
-}
-OCRService --> EasyOCRReader : "uses"
 ```
 
 **Diagram sources**
-- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [ocr_service.py:3-17](file://apps/text_extractor_engine/services/ocr_service.py#L3-L17)
 
 **Section sources**
 - [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 
-### PDFService
-Responsibilities:
-- Convert a PDF into a sequence of images (one per page)
-- Save each page as a JPEG file with a predictable naming scheme
-- Return a list of generated image paths
-
-Processing logic:
-- Uses pdf2image to convert PDF pages to PIL images
-- Iterates through pages, saves as JPEG, and collects paths
-
-```mermaid
-flowchart TD
-Start(["PDF path"]) --> Convert["Convert PDF pages to images"]
-Convert --> Loop{"More pages?"}
-Loop --> |Yes| Save["Save page as JPEG"]
-Save --> Collect["Collect image path"]
-Collect --> Loop
-Loop --> |No| Return["Return list of image paths"]
-```
-
-**Diagram sources**
-- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-
-**Section sources**
-- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-
-### ExtractTextService
-Responsibilities:
-- Determine input file type (PDF vs image)
-- For PDFs: convert to images and apply OCR to each page
-- For images: apply OCR directly
-- Aggregate and return extracted text
-
-Integration points:
-- Delegates PDF conversion to PDFService
-- Delegates OCR to OCRService
+### ExtractTextService Analysis
+ExtractTextService coordinates OCR and PDF conversion:
+- PDF Handling: Converts PDFs to images using PDFService and iterates through each page to apply OCR.
+- Image Handling: Applies OCR directly to image files.
+- Text Cleaning: Normalizes whitespace, replaces escape sequences with spaces, collapses multiple spaces, and trims output.
 
 ```mermaid
 classDiagram
 class ExtractTextService {
 -ocr_service : OCRService
 -pdf_service : PDFService
-+extract_text(file_path) str
++extract_text(file_path : str) str
++clean_text(text : str) str
 }
-ExtractTextService --> OCRService : "uses"
-ExtractTextService --> PDFService : "uses"
+class PDFService {
++pdf_to_images(pdf_path : str) str[]
+}
+class OCRService {
++extract(image_path : str) str
+}
+ExtractTextService --> PDFService : "converts PDF to images"
+ExtractTextService --> OCRService : "applies OCR"
 ```
 
 **Diagram sources**
-- [extract_text.py:5-27](file://apps/text_extractor_engine/services/extract_text.py#L5-L27)
+- [extract_text.py:5-34](file://apps/text_extractor_engine/services/extract_text.py#L5-L34)
+- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [ocr_service.py:6-17](file://apps/text_extractor_engine/services/ocr_service.py#L6-L17)
 
 **Section sources**
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
 
-### AnalysisService Integration
-Responsibilities:
-- Create a Document instance via DocumentService
-- Extract raw text using ExtractTextService
-- Update the Document with raw_text and save
+### PDFService Analysis
+PDFService converts a PDF into a sequence of JPEG images:
+- Iterative Conversion: Uses pdf2image to render pages and saves each page as a JPEG with a generated path.
+- Page List: Returns a list of image paths corresponding to the PDF pages.
+
+```mermaid
+flowchart TD
+Start(["PDFService.pdf_to_images"]) --> Convert["Convert PDF pages to images"]
+Convert --> Loop{"More pages?"}
+Loop --> |Yes| Save["Save page as JPEG<br/>Generate path"]
+Save --> Loop
+Loop --> |No| ReturnPaths["Return list of image paths"]
+ReturnPaths --> End(["End"])
+```
+
+**Diagram sources**
+- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
+
+**Section sources**
+- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+
+### AnalysisService and API Integration
+AnalysisService orchestrates the OCR-enabled analysis workflow:
+- Document Creation: Uses DocumentService to persist the uploaded file metadata, language, and title.
+- OCR Extraction: Calls ExtractTextService to extract and clean text from the stored file path.
+- Downstream Processing: Constructs a DocumentInput dataclass and invokes inspection logic.
 
 ```mermaid
 sequenceDiagram
-participant Client as "Client"
-participant Analysis as "AnalysisService"
+participant View as "AnalyzeView"
+participant Service as "AnalysisService"
 participant Extract as "ExtractTextService"
-participant DB as "Document model"
-Client->>Analysis : "inspect_uploaded_file(...)"
-Analysis->>DB : "create Document"
-Analysis->>Extract : "extract_text(document.file.path)"
-Extract-->>Analysis : "raw_text"
-Analysis->>DB : "update raw_text and save"
+participant Model as "Document Model"
+View->>Service : "inspect_uploaded_file(user, file_obj, title, lang)"
+Service->>Model : "create_document(...)"
+Service->>Extract : "extract_text(document.file.path)"
+Extract-->>Service : "cleaned_text"
+Service->>Model : "update raw_text"
+Service-->>View : "AnalysisResult"
 ```
 
 **Diagram sources**
-- [analysis_service.py:16-43](file://apps/analysis/services/analysis_service.py#L16-L43)
-- [extract_text.py:10-27](file://apps/text_extractor_engine/services/extract_text.py#L10-L27)
-- [models.py:5-14](file://apps/files/models.py#L5-L14)
+- [views.py:22-56](file://apps/analysis/views.py#L22-L56)
+- [analysis_service.py:21-59](file://apps/analysis/services/analysis_service.py#L21-L59)
+- [extract_text.py:36-54](file://apps/text_extractor_engine/services/extract_text.py#L36-L54)
+- [models.py:11-13](file://apps/files/models.py#L11-L13)
 
 **Section sources**
-- [analysis_service.py:1-43](file://apps/analysis/services/analysis_service.py#L1-L43)
+- [analysis_service.py:18-59](file://apps/analysis/services/analysis_service.py#L18-L59)
+- [views.py:15-56](file://apps/analysis/views.py#L15-L56)
 
-### Legacy API Endpoint (ContractUploadView)
-Responsibilities:
-- Accept multipart/form-data uploads
-- Convert PDFs to images and apply OCR to each page
-- Aggregate text and compute average confidence
-- Update the Document with OCR results
+### Document Model and Serializers
+The Document model stores OCR-related fields and enforces validation:
+- Fields: file, user, file_extension, uploaded_at, signed_at, lang, raw_text, confidence, title.
+- Serializers: Control read-only fields and validate supported file types.
 
 ```mermaid
-sequenceDiagram
-participant Client as "Client"
-participant View as "ContractUploadView"
-participant OCR as "OCRService"
-participant PDF as "pdf_to_images"
-participant DB as "Document model"
-Client->>View : "POST /upload"
-View->>DB : "save Document"
-alt "PDF"
-View->>PDF : "convert_from_path"
-PDF-->>View : "images"
-loop "for each image"
-View->>OCR : "extract(image)"
-OCR-->>View : "text"
-end
-else "Image"
-View->>OCR : "extract(image_path)"
-OCR-->>View : "text"
-end
-View->>DB : "update raw_text and confidence"
+erDiagram
+DOCUMENT {
+uuid id PK
+string file
+uuid user FK
+string file_extension
+timestamp uploaded_at
+timestamp signed_at
+string lang
+text raw_text
+float confidence
+string title
+}
 ```
 
 **Diagram sources**
-- [views.py:14-93](file://backupApps/api/views.py#L14-L93)
-- [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
+- [models.py:5-17](file://apps/files/models.py#L5-L17)
 
 **Section sources**
-- [views.py:1-93](file://backupApps/api/views.py#L1-L93)
+- [models.py:5-17](file://apps/files/models.py#L5-L17)
+- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
 
 ## Dependency Analysis
-External libraries and their roles:
-- EasyOCR: Performs text recognition from images
-- pdf2image: Converts PDFs to images for OCR processing
-- Django: Provides the Document model and persistence layer
-- REST Framework: Handles file uploads and API responses
+The OCR pipeline exhibits clear separation of concerns:
+- API layer depends on AnalysisService.
+- AnalysisService depends on ExtractTextService and Document model/serializer.
+- ExtractTextService depends on PDFService and OCRService.
+- OCRService depends on EasyOCR Reader.
 
 ```mermaid
-graph TB
-OCR["OCRService"] --> EasyOCR["EasyOCR library"]
-Extract["ExtractTextService"] --> OCR
-Extract --> PDFConv["pdf2image"]
-Analysis["AnalysisService"] --> Extract
-View["ContractUploadView"] --> OCR
-View --> PDFConv
-Analysis --> Doc["Document model"]
-View --> Doc
+graph LR
+AV["AnalyzeView"] --> AS["AnalysisService"]
+AS --> ETS["ExtractTextService"]
+ETS --> PDF["PDFService"]
+ETS --> OCR["OCRService"]
+AS --> DM["Document Model"]
+AS --> DS["Document Serializers"]
 ```
 
 **Diagram sources**
-- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
-- [views.py:1-93](file://backupApps/api/views.py#L1-L93)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
+- [views.py:15-56](file://apps/analysis/views.py#L15-L56)
+- [analysis_service.py:18-59](file://apps/analysis/services/analysis_service.py#L18-L59)
+- [extract_text.py:5-54](file://apps/text_extractor_engine/services/extract_text.py#L5-L54)
+- [ocr_service.py:3-17](file://apps/text_extractor_engine/services/ocr_service.py#L3-L17)
+- [pdf_service.py:4-14](file://apps/text_extractor_engine/services/pdf_service.py#L4-L14)
+- [models.py:5-17](file://apps/files/models.py#L5-L17)
+- [serializers.py:6-61](file://apps/files/serializers.py#L6-L61)
 
 **Section sources**
-- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
-- [views.py:1-93](file://backupApps/api/views.py#L1-L93)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
+- [openapi.yaml:572-621](file://openapi.yaml#L572-L621)
 
 ## Performance Considerations
-- Language initialization: Configure EasyOCR with the minimal required languages to reduce model loading overhead. The current initialization supports English; expand only as needed.
-- Batch processing: For PDFs, process pages sequentially to avoid memory spikes. Consider batching page conversions and OCR calls for very large documents.
-- Image quality: Preprocess images to improve OCR accuracy. Techniques include resizing, binarization, noise reduction, and deskewing. These steps can be integrated before calling OCR.
-- Confidence scoring: Use confidence thresholds to filter low-quality OCR results. If confidence is below a threshold, consider reprocessing with adjusted preprocessing or manual review.
-- Caching: Cache OCR results for identical images or documents to avoid redundant processing.
-- Resource limits: Monitor GPU/CPU usage when running EasyOCR. Adjust batch sizes and concurrency to prevent resource exhaustion.
+- Reader Initialization: The EasyOCR Reader is initialized once at module level to avoid repeated model loading overhead.
+- PDF Conversion: Converting PDFs to images is I/O bound; batch processing multiple pages sequentially can be optimized by parallelizing page rendering and OCR tasks where appropriate.
+- Text Cleaning: Whitespace normalization and escape sequence replacement are linear in text length and add minimal overhead.
+- Confidence Computation: Computing average confidence is O(n) over detected text lines.
+- Language Support: Defaulting to English reduces model complexity; adding languages increases inference time and memory usage proportionally to the number of languages loaded.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and remedies:
-- Low OCR accuracy on low-quality scans:
-  - Apply preprocessing (noise reduction, contrast enhancement, binarization).
-  - Increase image DPI/resolution before OCR.
-  - Use deskewing to correct skewed text.
-- Multi-language documents:
-  - Initialize EasyOCR with multiple languages to capture mixed scripts.
-  - Segment regions by language if supported by downstream processing.
-- PDF handling:
-  - Ensure pdf2image is installed and Ghostscript is available for PDF conversion.
-  - Verify permissions to write temporary image files for page extraction.
-- Memory and performance:
-  - Process PDFs page-by-page to limit memory usage.
-  - Limit concurrent OCR jobs and tune batch sizes.
-- Confidence thresholds:
-  - Implement a minimum confidence threshold; if below threshold, flag for manual review or reprocessing.
-- Error handling:
-  - Wrap OCR calls in try-except blocks and log errors with file paths for debugging.
-  - On failure, consider partial updates or cleanup of intermediate files.
+Common OCR issues and solutions:
+- Poor Image Quality: Enhance contrast, brightness, and resolution before OCR. Use preprocessing libraries to binarize or denoise images.
+- Text Skewing or Rotation: Apply geometric correction or deskewing algorithms prior to OCR to align text lines horizontally.
+- Mixed Font Types and Styles: Normalize fonts by resizing and standardizing text appearance. Consider increasing OCR model size or enabling multi-directional detection if supported.
+- Language Mismatch: Set the language parameter during document upload to match the document’s language. Expand EasyOCR language list accordingly.
+- Slow Performance: Reduce image resolution, limit page count for PDFs, or process pages in parallel. Cache OCR results for repeated queries.
 
-**Section sources**
-- [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
-- [views.py:69-79](file://backupApps/api/views.py#L69-L79)
+[No sources needed since this section provides general guidance]
 
 ## Conclusion
-VeritasShield’s OCR service leverages EasyOCR for robust text extraction from images and PDFs. The ExtractTextService orchestrates PDF-to-image conversion and page-wise OCR, while the OCRService aggregates results and computes confidence metrics. The AnalysisService integrates OCR into the document lifecycle, persisting extracted text and confidence scores. To enhance reliability and performance, adopt preprocessing techniques, configure language lists carefully, and implement confidence-based quality checks. The modular design allows straightforward extension for advanced features such as multi-language support, region-specific processing, and improved fallback strategies for degraded scans.
+The OCR service implementation leverages EasyOCR with a clean, modular architecture. OCRService handles text extraction and confidence scoring, ExtractTextService manages PDF-to-image conversion and text cleaning, and AnalysisService integrates OCR into the broader document analysis workflow. The system supports English by default and can be extended to additional languages. By addressing image quality, orientation, and language mismatches, OCR accuracy can be significantly improved. Performance can be tuned through preprocessing, parallelization, and resource allocation strategies.
+
+[No sources needed since this section summarizes without analyzing specific files]
+
+## Appendices
+
+### Practical Examples
+- Processing Different Image Types: Upload JPG, PNG, or JPEG files; ExtractTextService applies OCR directly to the image path.
+- Processing PDFs: Upload a PDF; ExtractTextService converts each page to an image and runs OCR per page, concatenating results.
+- Handling Various Text Orientations: Preprocess images to correct skew and rotation before OCR to improve accuracy.
+- Optimizing Accuracy: Increase image DPI, normalize lighting, and select the correct language during upload.
+
+[No sources needed since this section provides general guidance]
+
+### Configuration Options
+- Language Support Expansion: Modify the EasyOCR Reader initialization to include additional languages. Ensure sufficient memory and compute resources.
+- OCR Parameters: Adjust EasyOCR parameters such as paragraph detection, text threshold, and GPU usage depending on deployment environment.
+- API Language Parameter: The analyze endpoint accepts a language parameter to specify the document language for OCR processing.
+
+**Section sources**
+- [ocr_service.py:3](file://apps/text_extractor_engine/services/ocr_service.py#L3)
+- [views.py:40-41](file://apps/analysis/views.py#L40-L41)
+- [openapi.yaml:599-602](file://openapi.yaml#L599-L602)
