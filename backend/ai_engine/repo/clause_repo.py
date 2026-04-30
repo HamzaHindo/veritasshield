@@ -21,7 +21,7 @@ class ClauseRepository:
             List[Dict]: A list of clause dictionaries.
                         Example: [{'clause_id': 1, 'text': '...', 'type': '...'}, ...]
         """
-        
+
         db = Neo4jConnection()
 
         with db._driver.session() as s:
@@ -35,7 +35,7 @@ class ClauseRepository:
                 ''',
                 doc_id=doc_id
             )
-        return [dict(r) for r in result]
+            return [dict(r) for r in result]
 
     def get_clause_details(self, clause_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -72,13 +72,13 @@ class ClauseRepository:
                 clause_id=clause_id
             )
             record = clause_result.single()
-            
+
             # Clause not found in db
             if not record:
                 return None
-    
+
             clause_details = Clause(record['id'], record['text'], record['clause_type'])
-    
+
             conflicts_result = s.run(
                 '''
                 MATCH (c:Clause {id: $clause_id})-[r:CONTRADICTS]->(other:Clause)
@@ -105,7 +105,7 @@ class ClauseRepository:
                     reason=r['reason']
                 ) for r in conflicts_result
             ]
-    
+
             similar_result = s.run(
                 '''
                 MATCH (c:Clause {id: $clause_id})-[r:SIMILAR_TO]->(other:Clause)
@@ -134,10 +134,9 @@ class ClauseRepository:
         response = {
             'Clause'        : clause_details,
             'Conflicts'     : conflicts,
-            'Similarities'  : similar 
+            'Similarities'  : similar
         }
 
         return response
-        
 
 clause_repo = ClauseRepository() # I will import this instance in the service layer in backend to use its methods.

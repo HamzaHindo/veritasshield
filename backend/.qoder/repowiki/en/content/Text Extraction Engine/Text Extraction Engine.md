@@ -5,11 +5,10 @@
 - [extract_text.py](file://apps/text_extractor_engine/services/extract_text.py)
 - [ocr_service.py](file://apps/text_extractor_engine/services/ocr_service.py)
 - [pdf_service.py](file://apps/text_extractor_engine/services/pdf_service.py)
-- [models.py](file://apps/files/models.py)
-- [document_services.py](file://apps/files/services/document_services.py)
-- [serializers.py](file://apps/files/serializers.py)
-- [urls.py](file://apps/files/urls.py)
 - [settings.py](file://config/settings.py)
+- [urls.py](file://config/urls.py)
+- [views.py](file://apps/files/views.py)
+- [document_services.py](file://apps/files/services/document_services.py)
 </cite>
 
 ## Table of Contents
@@ -25,86 +24,81 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the text extraction engine for VeritasShield, focusing on multi-format text extraction for PDFs, images, and other document types. It explains the OCR service implementation using EasyOCR, the PDF processing pipeline (conversion to images, batch processing), and the extraction service architecture. It also covers performance optimization, error handling strategies for corrupted or low-quality inputs, and integration points with the broader file management system.
+This document describes the text extraction engine used by Veritas Shield. It focuses on the OCR service built with EasyOCR, PDF processing utilities powered by pdf2image, and the multi-format text extraction pipeline. The pipeline supports single-page and multi-page PDFs as well as direct image inputs. It also outlines error handling strategies, quality assurance measures, configuration options for OCR parameters and language support, and practical guidance for handling degraded images and mixed-content documents.
 
 ## Project Structure
-The text extraction engine resides under the dedicated app for extraction and integrates with the files app for document lifecycle management. Key modules:
-- Extraction services: ExtractTextService orchestrates OCR and PDF conversion.
-- OCR service: EasyOCR-based text recognition from images.
-- PDF service: Converts PDF pages to images.
-- Files app: Document model, serializers, and upload/view integration.
-- Settings: Global configuration and media handling.
+The text extraction engine resides under the text extractor engine app and exposes three primary services:
+- ExtractTextService orchestrates extraction across formats.
+- OCRService wraps EasyOCR for text recognition.
+- PDFService converts PDFs to images for OCR processing.
 
 ```mermaid
 graph TB
-subgraph "Extraction App"
+subgraph "Text Extractor Engine"
 ETS["ExtractTextService<br/>extract_text.py"]
 OCR["OCRService<br/>ocr_service.py"]
 PDF["PDFService<br/>pdf_service.py"]
 end
-subgraph "Files App"
-DOC["Document model<br/>files/models.py"]
-SER["DocumentCreateSerializer<br/>files/serializers.py"]
-SVC["DocumentService<br/>files/document_services.py"]
-URL["Files URLs<br/>apps/files/urls.py"]
+subgraph "Django Integration"
+CFG["Django Settings<br/>settings.py"]
+URL["URLs<br/>urls.py"]
+VIEWS["Files Views<br/>apps/files/views.py"]
+DOC_SVC["DocumentService<br/>apps/files/services/document_services.py"]
 end
-subgraph "Config"
-SET["Django Settings<br/>config/settings.py"]
-end
-ETS --> PDF
 ETS --> OCR
-SVC --> ETS
-SER --> DOC
-URL --> SVC
-SET --> URL
+ETS --> PDF
+URL --> VIEWS
+VIEWS --> DOC_SVC
+DOC_SVC --> ETS
+CFG --> ETS
 ```
 
 **Diagram sources**
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
 - [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 - [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
-- [document_services.py:1-137](file://apps/files/services/document_services.py#L1-L137)
-- [serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
-- [urls.py:1-24](file://apps/files/urls.py#L1-L24)
 - [settings.py:1-155](file://config/settings.py#L1-L155)
+- [urls.py:1-31](file://config/urls.py#L1-L31)
+- [views.py:1-35](file://apps/files/views.py#L1-L35)
+- [document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
 
 **Section sources**
-- [extract_text.py:1-28](file://apps/text_extractor_engine/services/extract_text.py#L1-L28)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
 - [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 - [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
-- [models.py:1-18](file://apps/files/models.py#L1-L18)
-- [document_services.py:1-137](file://apps/files/services/document_services.py#L1-L137)
-- [serializers.py:1-61](file://apps/files/serializers.py#L1-L61)
-- [urls.py:1-24](file://apps/files/urls.py#L1-L24)
 - [settings.py:1-155](file://config/settings.py#L1-L155)
+- [urls.py:1-31](file://config/urls.py#L1-L31)
+- [views.py:1-35](file://apps/files/views.py#L1-L35)
+- [document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
 
 ## Core Components
-- ExtractTextService: Central coordinator that decides whether to process a PDF via page-to-image conversion or directly pass non-PDF files to OCR.
-- OCRService: Uses EasyOCR to recognize text from images, returning recognized text joined by newlines and computing an average confidence score.
-- PDFService: Converts each page of a PDF into a JPEG image and returns a list of generated image paths.
-- Document model and serializer: Define storage fields for extracted raw text and confidence, and enforce supported file types.
-- DocumentService: Provides upload and inspection workflows; integration points for invoking extraction are available for extension.
+- ExtractTextService
+  - Determines file type and dispatches to appropriate handler.
+  - For PDFs: converts each page to an image and runs OCR per page.
+  - For images: runs OCR directly.
+  - Cleans extracted text by normalizing whitespace and removing escape sequences.
+- OCRService
+  - Initializes EasyOCR Reader with a default language set.
+  - Extracts text lines and computes average confidence from OCR results.
+- PDFService
+  - Converts a PDF into a sequence of JPEG images, one per page.
+  - Returns a list of generated image paths for subsequent OCR processing.
 
-Key responsibilities and interactions:
-- ExtractTextService delegates to PDFService for PDFs and to OCRService for images.
-- OCRService encapsulates EasyOCR initialization and text extraction logic.
-- PDFService handles page iteration and image persistence.
-- Document model stores extracted raw_text and confidence metrics for downstream analysis.
+Key behaviors:
+- Multi-page PDF handling: Iterates through page images and concatenates OCR results.
+- Text normalization: Removes literal and actual escape sequences, collapses extra spaces, and trims output.
 
 **Section sources**
-- [extract_text.py:10-28](file://apps/text_extractor_engine/services/extract_text.py#L10-L28)
+- [extract_text.py:5-55](file://apps/text_extractor_engine/services/extract_text.py#L5-L55)
 - [ocr_service.py:6-18](file://apps/text_extractor_engine/services/ocr_service.py#L6-L18)
 - [pdf_service.py:4-15](file://apps/text_extractor_engine/services/pdf_service.py#L4-L15)
-- [models.py:5-15](file://apps/files/models.py#L5-L15)
-- [document_services.py:83-110](file://apps/files/services/document_services.py#L83-L110)
 
 ## Architecture Overview
-The extraction pipeline follows a simple orchestration pattern:
-- Input file path is inspected for PDF extension.
-- For PDFs: Convert each page to an image, iterate over resulting images, and extract text per image via OCR.
-- For non-PDF images: Extract text directly from the image.
-- Aggregated text is returned as a single string.
+The extraction pipeline follows a simple, layered design:
+- Input detection: Determine whether the input is a PDF or an image.
+- PDF conversion: Convert each page to an image using pdf2image.
+- OCR processing: Run EasyOCR on each page image.
+- Text aggregation: Concatenate per-page results and normalize output.
 
 ```mermaid
 sequenceDiagram
@@ -113,23 +107,23 @@ participant Extractor as "ExtractTextService"
 participant PDFSvc as "PDFService"
 participant OCRSvc as "OCRService"
 Client->>Extractor : "extract_text(file_path)"
-alt "file_path ends with .pdf"
+alt "File is PDF"
 Extractor->>PDFSvc : "pdf_to_images(pdf_path)"
-PDFSvc-->>Extractor : "image_paths[]"
-loop "for each image_path"
-Extractor->>OCRSvc : "extract(image_path)"
-OCRSvc-->>Extractor : "text_chunk"
-end
-Extractor-->>Client : "combined_text"
-else "non-pdf image"
+PDFSvc-->>Extractor : "list of image paths"
+loop "For each page image"
 Extractor->>OCRSvc : "extract(image_path)"
 OCRSvc-->>Extractor : "text"
-Extractor-->>Client : "text"
 end
+else "File is image"
+Extractor->>OCRSvc : "extract(image_path)"
+OCRSvc-->>Extractor : "text"
+end
+Extractor->>Extractor : "clean_text(text)"
+Extractor-->>Client : "normalized text"
 ```
 
 **Diagram sources**
-- [extract_text.py:10-28](file://apps/text_extractor_engine/services/extract_text.py#L10-L28)
+- [extract_text.py:36-55](file://apps/text_extractor_engine/services/extract_text.py#L36-L55)
 - [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
 - [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
 
@@ -137,169 +131,208 @@ end
 
 ### ExtractTextService
 Responsibilities:
-- Route extraction requests based on file extension.
-- Coordinate PDF-to-image conversion and batch OCR processing.
-- Aggregate OCR outputs into a single text result.
+- Orchestrates extraction across formats.
+- Aggregates multi-page OCR results.
+- Normalizes extracted text for downstream processing.
 
 Processing logic highlights:
-- PDF branch: invokes PDFService to produce page images, iterates over each image, and concatenates OCR results.
-- Non-PDF branch: passes the image path directly to OCRService.
+- PDF branch: Calls PDFService to produce page images, iterates over each image, and accumulates OCR text.
+- Image branch: Directly calls OCRService.
+- Cleaning: Replaces escape sequences with spaces, collapses multiple spaces, and trims.
 
 ```mermaid
 flowchart TD
-Start(["Entry: extract_text(file_path)"]) --> CheckExt{"Ends with '.pdf'?"}
-CheckExt --> |Yes| Convert["PDFService.pdf_to_images(pdf_path)"]
-Convert --> LoopImages["Iterate image_paths"]
-LoopImages --> OCR["OCRService.extract(image_path)"]
-OCR --> Accumulate["Concatenate text chunks"]
-Accumulate --> ReturnPDF["Return aggregated text"]
-CheckExt --> |No| OCRDirect["OCRService.extract(image_path)"]
-OCRDirect --> ReturnImg["Return text"]
+Start(["Entry: extract_text(file_path)"]) --> CheckType{"Endswith '.pdf'?"}
+CheckType --> |Yes| ToImages["Call PDFService.pdf_to_images()"]
+ToImages --> LoopPages{"For each page image"}
+LoopPages --> RunOCR["Call OCRService.extract()"]
+RunOCR --> Accumulate["Concatenate text"]
+Accumulate --> NextPage{"More pages?"}
+NextPage --> |Yes| LoopPages
+NextPage --> |No| Clean["Clean text"]
+CheckType --> |No| DirectOCR["Call OCRService.extract()"]
+DirectOCR --> Clean
+Clean --> End(["Return normalized text"])
 ```
 
 **Diagram sources**
-- [extract_text.py:10-28](file://apps/text_extractor_engine/services/extract_text.py#L10-L28)
-- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
-- [ocr_service.py:8-17](file://apps/text_extractor_engine/services/ocr_service.py#L8-L17)
+- [extract_text.py:36-55](file://apps/text_extractor_engine/services/extract_text.py#L36-L55)
 
 **Section sources**
-- [extract_text.py:10-28](file://apps/text_extractor_engine/services/extract_text.py#L10-L28)
+- [extract_text.py:5-55](file://apps/text_extractor_engine/services/extract_text.py#L5-L55)
 
 ### OCRService
-Implementation details:
-- Initializes an EasyOCR reader for English by default.
-- Performs text recognition from an image path.
-- Builds a list of recognized text parts and computes an average confidence across detections.
-- Returns newline-separated text.
+Responsibilities:
+- Performs OCR using EasyOCR.
+- Computes average confidence across detected text lines.
 
-Optimization considerations:
-- Reader initialization cost can be amortized; consider reusing a single reader instance per process.
-- Confidence aggregation provides a simple metric for downstream filtering or fallback decisions.
+Implementation notes:
+- Uses a globally initialized EasyOCR Reader configured for a specific language.
+- Returns recognized text joined by newlines.
+- Confidence calculation averages per-line confidence scores.
 
-**Section sources**
+```mermaid
+classDiagram
+class OCRService {
++extract(image_path) str
+}
+class EasyOCRReader {
++readtext(image_path) list
+}
+OCRService --> EasyOCRReader : "uses"
+```
+
+**Diagram sources**
 - [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 
-### PDFService
-Implementation details:
-- Converts a PDF into a list of PIL images using a conversion library.
-- Saves each page as a JPEG with a deterministic naming scheme and collects output paths.
-- Returns the list of generated image paths.
+**Section sources**
+- [ocr_service.py:6-18](file://apps/text_extractor_engine/services/ocr_service.py#L6-L18)
 
-Batch processing characteristics:
-- Iterates over all pages and saves them individually.
-- Suitable for subsequent OCR processing in ExtractTextService.
+### PDFService
+Responsibilities:
+- Converts a PDF into a sequence of JPEG images.
+- Saves each page as a separate image file and returns the list of paths.
+
+Behavior:
+- Uses pdf2image.convert_from_path to render pages.
+- Names output images using the original PDF path plus a page index suffix.
+
+```mermaid
+flowchart TD
+A["Input: pdf_path"] --> B["convert_from_path(pdf_path)"]
+B --> C{"For each page image"}
+C --> D["Save as JPEG with suffix '_page_<i>.jpg'"]
+D --> E["Append path to list"]
+E --> F{"More pages?"}
+F --> |Yes| C
+F --> |No| G["Return list of paths"]
+```
+
+**Diagram sources**
+- [pdf_service.py:5-14](file://apps/text_extractor_engine/services/pdf_service.py#L5-L14)
 
 **Section sources**
+- [pdf_service.py:4-15](file://apps/text_extractor_engine/services/pdf_service.py#L4-L15)
+
+### Integration with Django and Document Workflows
+- The text extraction engine is part of the text extractor engine app and is integrated into higher-level document processing via DocumentService.
+- Django URL configuration includes the files app, which exposes document-related endpoints; the text extractor engine is leveraged by document processing flows.
+
+```mermaid
+graph TB
+subgraph "Django App Layer"
+FILES_VIEWS["apps/files/views.py"]
+FILES_SERVICES["apps/files/services/document_services.py"]
+end
+subgraph "Text Extraction Engine"
+EXTRACT["apps/text_extractor_engine/services/extract_text.py"]
+OCR["apps/text_extractor_engine/services/ocr_service.py"]
+PDF["apps/text_extractor_engine/services/pdf_service.py"]
+end
+FILES_VIEWS --> FILES_SERVICES
+FILES_SERVICES --> EXTRACT
+EXTRACT --> OCR
+EXTRACT --> PDF
+```
+
+**Diagram sources**
+- [views.py:1-35](file://apps/files/views.py#L1-L35)
+- [document_services.py:1-126](file://apps/files/services/document_services.py#L1-L126)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
 - [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
 
-### Document Model and Serializers
-Fields relevant to extraction:
-- raw_text: stores extracted text.
-- confidence: stores a numeric confidence metric derived from OCR results.
-- file_extension: indicates original file type.
-- lang: language hint used during OCR initialization.
-
-Validation and upload:
-- Serializer enforces supported file extensions.
-- Upload workflow persists the document and prepares it for downstream processing.
-
-Integration hooks:
-- DocumentService orchestrates insertion and inspection; extraction can be invoked during these flows.
-
 **Section sources**
-- [models.py:5-15](file://apps/files/models.py#L5-L15)
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [document_services.py:83-110](file://apps/files/services/document_services.py#L83-L110)
-
-### Extraction Service Architecture
-Current architecture:
-- ExtractTextService acts as a facade that composes PDFService and OCRService.
-- No explicit factory pattern is implemented; routing is based on file extension checks.
-
-Recommended enhancements:
-- Introduce a factory or registry keyed by file extension to decouple new formats and enable pluggable processors.
-- Support configurable OCR engines and languages via settings.
-
-**Section sources**
-- [extract_text.py:19-27](file://apps/text_extractor_engine/services/extract_text.py#L19-L27)
+- [urls.py:23-30](file://config/urls.py#L23-L30)
+- [views.py:17-35](file://apps/files/views.py#L17-L35)
+- [document_services.py:16-126](file://apps/files/services/document_services.py#L16-L126)
 
 ## Dependency Analysis
-External dependencies and integrations:
-- EasyOCR: OCR engine for text recognition.
-- pdf2image: PDF-to-image conversion.
-- Django REST Framework: File upload and serialization.
-- Django settings: Media root and parser configuration.
+- Internal dependencies:
+  - ExtractTextService depends on OCRService and PDFService.
+  - OCRService depends on EasyOCR.
+  - PDFService depends on pdf2image.
+- External dependencies:
+  - EasyOCR for OCR.
+  - pdf2image for PDF-to-image conversion.
+- Django integration:
+  - The text extractor engine is installed as an app and is used by document services and views.
 
 ```mermaid
 graph LR
-ExtractTextService --> PDFService
-ExtractTextService --> OCRService
-OCRService --> EasyOCR["EasyOCR"]
-PDFService --> PDF2Image["pdf2image"]
-DocumentService --> ExtractTextService
-DocumentCreateSerializer --> DocumentModel["Document model"]
-URLs --> DocumentService
-Settings --> URLs
+EXTRACT["ExtractTextService"] --> OCR["OCRService"]
+EXTRACT --> PDF["PDFService"]
+OCR --> EASY["EasyOCR"]
+PDF --> P2I["pdf2image"]
+EXTRACT -.-> DJANGO["Django Settings/Apps"]
 ```
 
 **Diagram sources**
-- [extract_text.py:1-2](file://apps/text_extractor_engine/services/extract_text.py#L1-L2)
-- [ocr_service.py:1](file://apps/text_extractor_engine/services/ocr_service.py#L1)
-- [pdf_service.py:1](file://apps/text_extractor_engine/services/pdf_service.py#L1)
-- [document_services.py:14-21](file://apps/files/services/document_services.py#L14-L21)
-- [serializers.py:32-46](file://apps/files/serializers.py#L32-L46)
-- [urls.py:6-23](file://apps/files/urls.py#L6-L23)
-- [settings.py:125-137](file://config/settings.py#L125-L137)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
 
 **Section sources**
-- [ocr_service.py:1](file://apps/text_extractor_engine/services/ocr_service.py#L1)
-- [pdf_service.py:1](file://apps/text_extractor_engine/services/pdf_service.py#L1)
-- [settings.py:125-137](file://config/settings.py#L125-L137)
+- [extract_text.py:1-55](file://apps/text_extractor_engine/services/extract_text.py#L1-L55)
+- [ocr_service.py:1-18](file://apps/text_extractor_engine/services/ocr_service.py#L1-L18)
+- [pdf_service.py:1-15](file://apps/text_extractor_engine/services/pdf_service.py#L1-L15)
+- [settings.py:26-40](file://config/settings.py#L26-L40)
 
 ## Performance Considerations
-- Batch image processing: PDFService generates multiple images; consider asynchronous processing or worker queues for large PDFs.
-- OCR caching: Store OCR results keyed by image hash to avoid recomputation.
-- Reader reuse: Ensure a single EasyOCR reader instance per process to minimize initialization overhead.
-- Memory management: Dispose of intermediate images and close file handles promptly.
-- Parallelization: Run OCR on multiple images concurrently with bounded concurrency.
-- Preprocessing: Normalize image brightness, contrast, and resolution to improve OCR accuracy.
+- Batch processing:
+  - Multi-page PDFs are processed page-by-page; consider batching page conversions and OCR calls for very large PDFs to reduce overhead.
+- Memory and disk:
+  - PDFService writes intermediate JPEGs to disk; ensure sufficient disk space and monitor temporary file cleanup.
+- Language model initialization:
+  - Initializing EasyOCR can be expensive; the current implementation initializes a global reader. For multi-language support or dynamic language switching, consider lazy initialization or reconfiguration strategies.
+- Parallelization:
+  - Current implementation is sequential. For improved throughput, consider parallelizing OCR calls per page image.
+- Preprocessing:
+  - Applying preprocessing steps (e.g., contrast enhancement, binarization) before OCR can improve accuracy on degraded images.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and mitigations:
-- Corrupted PDFs: Wrap PDF conversion in try/catch and return empty text or raise a structured error for retry/fallback.
-- Low-quality images: Validate DPI, contrast, and skew; apply preprocessing filters before OCR.
-- Unsupported formats: Enforce supported extensions in serializers and return clear error messages.
-- Out-of-memory errors: Limit concurrent OCR jobs and process PDFs in smaller batches.
-- Language mismatches: Allow configurable language lists in OCR initialization and fall back to default if needed.
+Common issues and solutions:
+- Skewed pages:
+  - Apply geometric correction or rotation correction before OCR to align text lines.
+- Low-quality scans:
+  - Enhance contrast, apply noise reduction, and consider binarization to improve OCR accuracy.
+- Mixed content documents:
+  - Segment content into text and non-text regions; run OCR only on text areas.
+- Language mismatch:
+  - Configure EasyOCR to use appropriate languages or language packs for the target content.
+- Performance bottlenecks:
+  - Reduce resolution of input images, process pages in batches, or enable parallel OCR processing.
+- Disk space constraints:
+  - Ensure adequate storage for intermediate page images; consider cleaning up temporary files after processing.
 
-Operational hooks:
-- ExtractTextService can be extended to catch exceptions and log diagnostics.
-- OCRService can compute and expose confidence thresholds for filtering.
-
-**Section sources**
-- [serializers.py:48-52](file://apps/files/serializers.py#L48-L52)
-- [ocr_service.py:13-17](file://apps/text_extractor_engine/services/ocr_service.py#L13-L17)
+[No sources needed since this section provides general guidance]
 
 ## Conclusion
-The current text extraction engine provides a straightforward pipeline for PDFs and images using EasyOCR and pdf2image. ExtractTextService orchestrates PDF-to-image conversion and batch OCR processing, while OCRService encapsulates text recognition and confidence computation. The files app defines the document model and upload flow, enabling integration with downstream analysis. Future enhancements should focus on a factory-based architecture, configurable OCR engines, robust error handling, and performance optimizations for large-scale processing.
+The text extraction engine integrates EasyOCR and pdf2image to deliver robust multi-format text extraction. ExtractTextService coordinates PDF conversion and OCR, while OCRService and PDFService encapsulate the core OCR and PDF processing logic. The design is modular and extensible, enabling future enhancements such as multi-language support, parallel processing, and advanced preprocessing for degraded content.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
-### Example Workflows
-- Extract text from a PDF:
-  - Invoke ExtractTextService.extract_text with a PDF path.
-  - PDFService converts pages to images; OCRService extracts text from each image; results are concatenated.
-- Extract text from a scanned image:
-  - Invoke ExtractTextService.extract_text with an image path.
-  - OCRService performs text recognition and returns the result.
-- Upload and prepare a document for analysis:
-  - Use DocumentService.create_document to persist the file.
-  - Use DocumentService.upload_document to trigger downstream processing (extraction and analysis).
+### Practical Examples
+- Extracting text from a PDF:
+  - Call ExtractTextService.extract_text with the PDF path. The service converts each page to an image and runs OCR per page, returning normalized text.
+- Extracting text from an image:
+  - Call ExtractTextService.extract_text with the image path. The service runs OCR directly and returns normalized text.
+- Handling degraded images:
+  - Preprocess images to improve contrast and readability before passing them to ExtractTextService.extract_text.
 
-**Section sources**
-- [extract_text.py:10-28](file://apps/text_extractor_engine/services/extract_text.py#L10-L28)
-- [document_services.py:83-110](file://apps/files/services/document_services.py#L83-L110)
+[No sources needed since this section provides general guidance]
+
+### Configuration Options
+- Language support:
+  - The EasyOCR Reader is initialized with a default language set. To support additional languages, configure the Reader accordingly.
+- Performance tuning:
+  - Adjust EasyOCR parameters (e.g., GPU usage, model selection) and tune PDFService output resolution to balance accuracy and speed.
+- Quality assurance:
+  - Use confidence thresholds to filter low-confidence OCR results; post-process text to remove artifacts and normalize spacing.
+
+[No sources needed since this section provides general guidance]

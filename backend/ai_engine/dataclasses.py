@@ -4,7 +4,7 @@ from typing import Optional
 @dataclass
 class SimilarityMatch:
     """
-    Represents a high-confidence semantic match between a newly analyzed 
+    Represents a high-confidence semantic match between a newly analyzed
     clause and an existing clause in the knowledge graph.
 
     Attributes:
@@ -26,7 +26,7 @@ class SimilarityMatch:
 @dataclass
 class Conflict(SimilarityMatch):
     """
-    Represents a detected logical contradiction or legal inconsistency between 
+    Represents a detected logical contradiction or legal inconsistency between
     a new clause and an existing clause in the database.
 
     Attributes:

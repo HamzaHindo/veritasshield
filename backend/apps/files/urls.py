@@ -6,12 +6,8 @@ from .views import DocumentClausesView, DocumentViewSet
 urlpatterns = [
     path(
         "documents/",
-        DocumentViewSet.as_view({"get": "list", "post": "create"}),
+        DocumentViewSet.as_view({"get": "list"}),
         name="document-list",
-    ),
-    path(
-        "upload/",
-        DocumentViewSet.as_view({"post": "upload"}),
     ),
     path(
         "documents/<int:pk>/",
